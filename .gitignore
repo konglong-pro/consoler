@@ -7,6 +7,9 @@ coverage/
 .consoler/*.db
 .consoler/*.db-*
 
+fixtures/sample-vault/.indbase/db.sqlite
+fixtures/sample-vault/.indbase/db.sqlite-*
+
 __pycache__/
 .pytest_cache/
 .venv/
