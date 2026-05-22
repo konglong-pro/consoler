@@ -50,11 +50,20 @@ program
   .argument("<agent_id>", "Registered agent id")
   .argument("<command>", "Agent command name")
   .requiredOption("--args <path>", "Path to JSON args file")
-  .description("Run static preview for a command")
-  .action(async (agentId: string, command: string, options: { args: string }) => {
+  .option("--approve-preview", "Approve read-only probe preview", false)
+  .description("Run static or probe preview for a command")
+  .action(async (agentId: string, command: string, options: { args: string; approvePreview?: boolean }) => {
     const runtime = new ConsolerRuntime();
-    const preview = await runtime.preview({ agentId, command, args: loadArgs(options.args) });
-    console.log(JSON.stringify(preview, null, 2));
+    const result = await runtime.preview(
+      { agentId, command, args: loadArgs(options.args) },
+      { approvePreview: Boolean(options.approvePreview) }
+    );
+    if (result.awaiting_preview_approval && result.preview_approval) {
+      console.log(formatApprovalMaterial(result.preview_approval));
+      process.exitCode = 2;
+      return;
+    }
+    console.log(JSON.stringify(result.preview, null, 2));
   });
 
 program
@@ -62,14 +71,23 @@ program
   .argument("<agent_id>", "Registered agent id")
   .argument("<command>", "Agent command name")
   .requiredOption("--args <path>", "Path to JSON args file")
-  .option("--approve", "Create approval token and execute", false)
+  .option("--approve-preview", "Approve and run probe preview before planning", false)
+  .option("--approve", "Create execution approval token and execute", false)
   .description("Plan, preview, approve, and optionally execute")
-  .action(async (agentId: string, command: string, options: { args: string; approve?: boolean }) => {
+  .action(async (agentId: string, command: string, options: { args: string; approvePreview?: boolean; approve?: boolean }) => {
     const runtime = new ConsolerRuntime();
     const result = await runtime.run(
       { agentId, command, args: loadArgs(options.args) },
-      { approve: Boolean(options.approve) }
+      {
+        approvePreview: Boolean(options.approvePreview),
+        approve: Boolean(options.approve)
+      }
     );
+    if (result.awaiting_preview_approval && result.preview_approval) {
+      console.log(formatApprovalMaterial(result.preview_approval));
+      process.exitCode = 2;
+      return;
+    }
     if (result.awaiting_approval && result.approval) {
       console.log(formatApprovalMaterial(result.approval));
       process.exitCode = 2;

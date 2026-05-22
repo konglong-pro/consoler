@@ -5,8 +5,10 @@ import TextInput from "ink-text-input";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ActionEvent, ActionPlan, AgentManifest, RenderableBlock } from "@consoler/protocol";
+import type { AgentCommand, ApprovalToken } from "@consoler/protocol";
 import {
   ConsolerRuntime,
+  requiresPreviewApproval,
   type PreparedAction,
   type RuntimeEventHandlers
 } from "@consoler/runtime";
@@ -17,6 +19,7 @@ import {
   validateFormForSubmit,
   valuesForSubmit
 } from "./form-submit.js";
+import { stepFieldIndex } from "./form-nav.js";
 import {
   defaultFormValues,
   fieldsFromCommand,
@@ -24,9 +27,16 @@ import {
 } from "./schema-form.js";
 
 const AGENT_ID = "indbase";
-const COMMAND = "indbase.doctor";
 
-type Phase = "boot" | "form" | "prepared" | "running" | "finished" | "replay";
+type Phase =
+  | "boot"
+  | "command_select"
+  | "form"
+  | "preview_approval"
+  | "prepared"
+  | "running"
+  | "finished"
+  | "replay";
 type TabId = "logs" | "events" | "json" | "replay";
 
 const TABS: TabId[] = ["logs", "events", "json", "replay"];
@@ -42,6 +52,9 @@ export function App({ replayActionId }: AppProps) {
   const [phase, setPhase] = useState<Phase>(replayActionId ? "replay" : "boot");
   const [tab, setTab] = useState<TabId>("events");
   const [manifest, setManifest] = useState<AgentManifest | null>(null);
+  const [selectedCommand, setSelectedCommand] = useState<string | null>(null);
+  const [previewApproval, setPreviewApproval] = useState<ApprovalToken | null>(null);
+  const [probePreview, setProbePreview] = useState<unknown | null>(null);
   const [fields, setFields] = useState<FormField[]>([]);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [prepared, setPrepared] = useState<PreparedAction | null>(null);
@@ -73,20 +86,34 @@ export function App({ replayActionId }: AppProps) {
     try {
       setBusy(true);
       const m = await runtime.discover(AGENT_ID);
-      const command = m.commands.find((c) => c.name === COMMAND);
-      if (!command) throw new Error(`Command not found: ${COMMAND}`);
-      const formFields = fieldsFromCommand(command);
-      const defaults = defaultFormValues(formFields);
       setManifest(m);
-      setFields(formFields);
-      formValuesRef.current = defaults;
-      setFormValues(defaults);
-      setPhase("form");
+      setPhase("command_select");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
+  };
+
+  const selectCommand = (commandName: string) => {
+    if (!manifest) return;
+    const command = manifest.commands.find((c) => c.name === commandName);
+    if (!command) {
+      setError(`Command not found: ${commandName}`);
+      return;
+    }
+    const formFields = fieldsFromCommand(command);
+    const defaults = defaultFormValues(formFields);
+    setSelectedCommand(commandName);
+    setFields(formFields);
+    formValuesRef.current = defaults;
+    setFormValues(defaults);
+    setPreviewApproval(null);
+    setProbePreview(null);
+    setPrepared(null);
+    setError(null);
+    setFocusedField(0);
+    setPhase("form");
   };
 
   const loadReplay = (actionId: string) => {
@@ -105,6 +132,7 @@ export function App({ replayActionId }: AppProps) {
 
   const submitForm = useCallback(
     async (pending?: { name: string; value: unknown }) => {
+      if (!selectedCommand) return;
       const args = valuesForSubmit(formValuesRef.current, pending);
       const validationError = validateFormForSubmit(fields, formValuesRef.current, pending);
       if (validationError) {
@@ -114,23 +142,57 @@ export function App({ replayActionId }: AppProps) {
       setError(null);
       setBusy(true);
       try {
-        const bundle = await runtime.prepareAction({
-          agentId: AGENT_ID,
-          command: COMMAND,
-          args
+        const input = { agentId: AGENT_ID, command: selectedCommand, args };
+        const commandDef = manifest?.commands.find((c) => c.name === selectedCommand);
+        if (commandDef && requiresPreviewApproval(commandDef)) {
+          const gate = await runtime.preview(input, { approvePreview: false });
+          if (gate.awaiting_preview_approval && gate.preview_approval) {
+            setPreviewApproval(gate.preview_approval);
+            setPhase("preview_approval");
+            return;
+          }
+          setProbePreview(gate.preview ?? null);
+        }
+        const bundle = await runtime.prepareAction(input, {
+          probePreview: probePreview ?? undefined
         });
+        setPrepared(bundle);
+        setEvents([]);
+        setBlocks([]);
+        setPhase("prepared");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [fields, manifest, probePreview, runtime, selectedCommand]
+  );
+
+  const approveProbePreview = async () => {
+    if (!selectedCommand) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const input = {
+        agentId: AGENT_ID,
+        command: selectedCommand,
+        args: formValuesRef.current
+      };
+      const gate = await runtime.preview(input, { approvePreview: true });
+      const preview = gate.preview;
+      setProbePreview(preview ?? null);
+      const bundle = await runtime.prepareAction(input, { probePreview: preview });
       setPrepared(bundle);
       setEvents([]);
       setBlocks([]);
       setPhase("prepared");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [fields, runtime]
-  );
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const scheduleSubmitForm = useCallback(
     (pending?: { name: string; value: unknown }) => {
@@ -168,6 +230,8 @@ export function App({ replayActionId }: AppProps) {
 
   const cancelApproval = () => {
     setPrepared(null);
+    setPreviewApproval(null);
+    setProbePreview(null);
     setPhase("form");
     setError(null);
   };
@@ -177,7 +241,26 @@ export function App({ replayActionId }: AppProps) {
       exit();
       return;
     }
-    if (key.tab) {
+    if (phase === "form" && fields.length > 0) {
+      if (key.upArrow) {
+        setFocusedField((current) => stepFieldIndex(current, -1, fields.length));
+        return;
+      }
+      if (key.downArrow) {
+        setFocusedField((current) => stepFieldIndex(current, 1, fields.length));
+        return;
+      }
+      if (key.tab) {
+        const delta = key.shift ? -1 : 1;
+        setFocusedField((current) => stepFieldIndex(current, delta, fields.length));
+        return;
+      }
+      if (key.return) {
+        scheduleSubmitForm();
+        return;
+      }
+    }
+    if (key.tab && key.ctrl) {
       const idx = TABS.indexOf(tab);
       setTab(TABS[(idx + 1) % TABS.length]!);
       return;
@@ -186,8 +269,12 @@ export function App({ replayActionId }: AppProps) {
       setError(null);
       return;
     }
-    if (phase === "form" && key.return) {
-      scheduleSubmitForm();
+    if (phase === "preview_approval" && input === "y" && !busy) {
+      void approveProbePreview();
+      return;
+    }
+    if (phase === "preview_approval" && input === "n") {
+      cancelApproval();
       return;
     }
     if (phase === "prepared" && input === "y" && !busy) {
@@ -233,7 +320,7 @@ export function App({ replayActionId }: AppProps) {
   return (
     <Box flexDirection="column" padding={1}>
       <Text bold color="green">
-        consoler TUI — {COMMAND}
+        consoler TUI — {selectedCommand ?? "select command"}
       </Text>
       {busy ? (
         <Text color="yellow">
@@ -245,9 +332,25 @@ export function App({ replayActionId }: AppProps) {
       <Box flexDirection="column" marginTop={1} flexGrow={1}>
         {phase === "boot" ? <Text>Loading manifest...</Text> : null}
 
+        {phase === "command_select" && manifest ? (
+          <Box flexDirection="column">
+            <Text bold>Select command</Text>
+            <SelectInput
+              items={manifest.commands.map((command: AgentCommand) => ({
+                label: command.name,
+                value: command.name
+              }))}
+              onSelect={(item) => selectCommand(item.value)}
+            />
+          </Box>
+        ) : null}
+
         {phase === "form" ? (
           <Box flexDirection="column">
-            <Text bold>Action form (Enter to prepare)</Text>
+            <Text bold>Action form (Tab/↑↓ move field, Enter continue)</Text>
+            <Text dimColor>
+              Field {focusedField + 1}/{fields.length}: {fields[focusedField]?.name}
+            </Text>
             {fields.map((field, index) => (
               <FormFieldRow
                 key={field.name}
@@ -258,6 +361,22 @@ export function App({ replayActionId }: AppProps) {
                 onSubmitValue={(v) => scheduleSubmitForm({ name: field.name, value: v })}
               />
             ))}
+          </Box>
+        ) : null}
+
+        {phase === "preview_approval" && previewApproval ? (
+          <Box flexDirection="column">
+            <Text bold>Preview approval (y=probe, n=cancel)</Text>
+            <Text>approval_id: {previewApproval.approval_id}</Text>
+            <Text dimColor>{previewApproval.material.plan_summary}</Text>
+            <Text dimColor>Side effects: {previewApproval.material.side_effects.join(", ")}</Text>
+          </Box>
+        ) : null}
+
+        {probePreview && (phase === "prepared" || phase === "running" || phase === "finished") ? (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold>Probe preview</Text>
+            <Text>{previewLine(probePreview)}</Text>
           </Box>
         ) : null}
 
@@ -273,12 +392,14 @@ export function App({ replayActionId }: AppProps) {
                 - {step.title}
               </Text>
             ))}
+            {!probePreview ? (
+              <Box marginTop={1}>
+                <Text bold>Preview</Text>
+                <Text>{previewLine(prepared.preview)}</Text>
+              </Box>
+            ) : null}
             <Box marginTop={1}>
-              <Text bold>Static preview</Text>
-            </Box>
-            <Text>{previewLine(prepared.preview)}</Text>
-            <Box marginTop={1}>
-              <Text bold>Approval (y=execute, n=cancel)</Text>
+              <Text bold>Execution approval (y=execute, n=cancel)</Text>
             </Box>
             <Text>approval_id: {prepared.approval.approval_id}</Text>
             <Text dimColor>{prepared.approval.material.plan_summary}</Text>
@@ -345,8 +466,10 @@ export function App({ replayActionId }: AppProps) {
 
       <Box marginTop={1}>
         <Text dimColor>
-        Tab switch | Enter prepare/submit replay | y approve | n cancel | Esc clear error | Ctrl+C
-        exit
+        {phase === "form"
+          ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
+          : "Tab bottom panels"}{" "}
+        | y/n approve | Esc clear | Ctrl+C exit
         </Text>
       </Box>
     </Box>
@@ -376,11 +499,15 @@ function FormFieldRow({
     return (
       <Box flexDirection="column" marginBottom={1}>
         {active ? <Text color="cyan">{label}</Text> : <Text>{label}</Text>}
-        <SelectInput
-          items={items}
-          initialIndex={value ? 1 : 0}
-          onSelect={(item) => onChange(item.value === "true")}
-        />
+        {active ? (
+          <SelectInput
+            items={items}
+            initialIndex={value ? 1 : 0}
+            onSelect={(item) => onChange(item.value === "true")}
+          />
+        ) : (
+          <Text dimColor>{String(value ?? false)}</Text>
+        )}
       </Box>
     );
   }
@@ -388,15 +515,19 @@ function FormFieldRow({
   return (
     <Box flexDirection="column" marginBottom={1}>
       {active ? <Text color="cyan">{label}</Text> : <Text>{label}</Text>}
-      <TextInput
-        value={String(value ?? "")}
-        focus={active}
-        onChange={(v) => onChange(v)}
-        onSubmit={(v) => {
-          onChange(v);
-          onSubmitValue?.(v);
-        }}
-      />
+      {active ? (
+        <TextInput
+          value={String(value ?? "")}
+          focus
+          onChange={(v) => onChange(v)}
+          onSubmit={(v) => {
+            onChange(v);
+            onSubmitValue?.(v);
+          }}
+        />
+      ) : (
+        <Text dimColor>{String(value ?? "") || "(empty)"}</Text>
+      )}
     </Box>
   );
 }

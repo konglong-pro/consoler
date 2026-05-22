@@ -1,4 +1,6 @@
-export type PreviewKind = "static" | "dynamic";
+export type PreviewKind = "static" | "dynamic" | "probe_readonly";
+
+export type ApprovalScope = "preview" | "execute";
 
 export type RenderableBlockType = "markdown" | "table" | "json" | "error";
 
@@ -98,10 +100,11 @@ export interface ApprovalToken {
   action_id: string;
   agent_id: string;
   command: string;
+  scope: ApprovalScope;
   args_hash: string;
-  plan_hash: string;
-  context_snapshot_hash: string;
-  side_effects_hash: string;
+  plan_hash?: string;
+  context_snapshot_hash?: string;
+  side_effects_hash?: string;
   preview_hash?: string;
   material: ApprovalMaterial;
   created_at: string;

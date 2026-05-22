@@ -31,7 +31,7 @@ describe("preview isolation", () => {
     const beforeActions = runtime.store.db.prepare("SELECT COUNT(*) AS c FROM actions").get() as { c: number };
     const beforePlans = runtime.store.db.prepare("SELECT COUNT(*) AS c FROM plans").get() as { c: number };
 
-    vi.spyOn(runtime as never, "fetchStaticPreview" as never).mockResolvedValue({
+    vi.spyOn(runtime as never, "fetchAgentPreview" as never).mockResolvedValue({
       summary: "static stub"
     });
 
@@ -111,6 +111,7 @@ describe("executePrepared", () => {
         action_id: "act_test_exec",
         agent_id: "indbase",
         command: "indbase.doctor",
+        scope: "execute",
         args_hash: "old",
         plan_hash: "hash",
         context_snapshot_hash: "stale",

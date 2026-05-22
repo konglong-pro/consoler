@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   indbaseDoctorArgsSchema,
+  indbaseIngestArgsSchema,
   indbaseManifestFixture,
+  indbaseManifestV1aFixture,
   manifestHasDuplicateCommands,
   validateActionEvent,
   validateCommandArgs,
@@ -61,6 +63,32 @@ describe("indbase.doctor args schema", () => {
   it("matches standalone doctor args schema", () => {
     const result = validateCommandArgs(indbaseDoctorArgsSchema, { vault_path: "E:/vault" });
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("V1a manifest", () => {
+  it("accepts probe_readonly preview policy", () => {
+    const result = validateManifest(indbaseManifestV1aFixture);
+    expect(result.ok).toBe(true);
+    const ingest = result.value?.commands.find((command) => command.name === "indbase.ingest_file");
+    expect(ingest?.preview_policy.preview_kind).toBe("probe_readonly");
+    expect(ingest?.preview_policy.requires_approval_before_preview).toBe(true);
+  });
+
+  it("validates indbase.ingest_file args", () => {
+    const ingest = indbaseManifestV1aFixture.commands.find(
+      (command) => command.name === "indbase.ingest_file"
+    )!;
+    expect(validateCommandArgs(ingest.args_schema, { vault_path: "/v", source_path: "/s" }).ok).toBe(
+      true
+    );
+    expect(validateCommandArgs(ingest.args_schema, { vault_path: "/v" }).ok).toBe(false);
+    expect(
+      validateCommandArgs(indbaseIngestArgsSchema, {
+        vault_path: "E:/vault",
+        source_path: "E:/file.txt"
+      }).ok
+    ).toBe(true);
   });
 });
 

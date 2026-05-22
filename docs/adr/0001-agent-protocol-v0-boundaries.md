@@ -25,7 +25,7 @@ Accepted v0 decisions:
 7. V0 registry is manual `.consoler/agents.json`; no install, marketplace, or upgrade manager.
 8. SQLite is used from day one for manifests, actions, runs, approvals, contexts, and events.
 9. V0 input excludes natural language mapping. Use explicit commands, slash commands, and schema forms only.
-10. The only v0 real command is `indbase.doctor`; `indbase.ingest_file` is the next tracer bullet.
+10. The only v0 real command is `indbase.doctor`. V1a adds `indbase.ingest_file` as the first side-effect tracer bullet (single local file, probe preview approval, execution approval).
 11. `indbase.doctor` preview is static and does not read the vault.
 12. `indbase.doctor` execute requires approval.
 13. Context snapshot is lightweight: vault marker/config/db mtimes, agent git state, and manifest hash. No full vault content hash in v0.

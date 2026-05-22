@@ -10,11 +10,11 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 
 - `docs/adr/`: durable architecture decisions. Read before changing protocol or runtime boundaries.
 - `docs/planning/`: scoped implementation plans and MVP acceptance criteria.
-- `packages/protocol/`: planned TypeScript protocol types, JSON Schemas, and validators.
-- `packages/runtime/`: planned TypeScript runtime core: registry, process manager, transport, planner, approval, event store, replay.
-- `packages/agentctl/`: planned headless CLI for protocol debugging before TUI work.
+- `packages/protocol/`: TypeScript protocol types, JSON Schemas, and validators.
+- `packages/runtime/`: TypeScript runtime core: registry, process manager, transport, planner, approval, event store, replay.
+- `packages/agentctl/`: headless CLI for protocol debugging and lifecycle smoke tests.
 - `packages/tui/`: Ink TUI (V0b). Depends on runtime prepared-action APIs.
-- `sdks/python/`: planned minimal Python SDK for out-of-process agents.
+- `sdks/python/`: minimal Python SDK for out-of-process agents.
 - `E:\indbase`: first real agent host repo. `indbase-agent` code belongs there, not in this repo.
 
 ## Common Commands
@@ -27,9 +27,12 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - TUI package test: `pnpm --filter @consoler/tui test`
 - Typecheck: `pnpm typecheck`
 - Build: `pnpm build`
-- TUI: `pnpm tui --` (schema form, approval, live events)
+- TUI: `pnpm tui --` (manifest command select, dual approval for probe commands)
 - TUI replay: `pnpm tui -- --replay <action_id>`
-- Planned indbase agent command: from `E:\indbase`, `uv run python -m indbase_agent` after that adapter exists.
+- Ingest preview: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json`
+- Ingest probe: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview`
+- Ingest run: `pnpm agentctl -- run indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview --approve`
+- Indbase agent command: from `E:\indbase`, `uv run python -m indbase_agent`
 
 Prefer narrow validation for the changed package before broad checks.
 
@@ -39,7 +42,8 @@ Prefer narrow validation for the changed package before broad checks.
 - Runtime lifecycle, approval, event store, replay: start in `docs/planning/v0-indbase-doctor-tracer-bullet.md`, then `packages/runtime/`.
 - Headless debugging CLI: start in `packages/agentctl/`; it must call the same runtime as the TUI.
 - V0b TUI behavior: start in `docs/planning/v0b-minimal-tui.md`; implement runtime prepared-action APIs before UI state.
-- Python agent SDK: start in `sdks/python/`; implement only what `indbase.doctor` needs.
+- V1a side-effect tracer (`indbase.ingest_file`): start in `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`; keep scope to one local file.
+- Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
 ## Validation Rules
@@ -58,6 +62,12 @@ Prefer narrow validation for the changed package before broad checks.
   2. Run Python SDK tests once the SDK test command exists.
   3. Run an `indbase.doctor` end-to-end smoke before claiming integration works.
 
+- Side-effect agent action change:
+  1. Read `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`.
+  2. Prove preview approval does not call write-oriented indbase helpers.
+  3. Run focused protocol/runtime/agentctl/TUI tests for preview approval, execution approval, and context drift.
+  4. Run the `indbase.doctor` regression smoke and an `indbase.ingest_file` smoke against a disposable fixture vault.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -74,6 +84,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Approval binds normalized args, plan, context snapshot, side effects, and preview hash when present.
 - Execution output is a structured event stream. Do not treat logs as progress.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
+- V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
 ## Do Not Edit Unless Explicitly Asked
 
@@ -87,6 +98,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/adr/0001-agent-protocol-v0-boundaries.md`: accepted v0 architecture boundaries and non-goals.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
+- `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
 
 ## Done Means
 

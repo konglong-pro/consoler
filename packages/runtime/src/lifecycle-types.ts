@@ -19,16 +19,38 @@ export interface CommandArgsInput {
   args: Record<string, unknown>;
 }
 
+export interface PrepareActionOptions {
+  probePreview?: unknown;
+}
+
+export interface PreviewOptions {
+  approvePreview?: boolean;
+}
+
+export interface PreviewLifecycleResult {
+  preview?: unknown;
+  preview_approval?: ApprovalToken;
+  awaiting_preview_approval: boolean;
+}
+
+export interface RunOptions {
+  approvePreview?: boolean;
+  approve?: boolean;
+}
+
 export interface RunResult {
   action_id: string;
   run_id: string;
   approval?: ApprovalToken;
+  preview_approval?: ApprovalToken;
+  awaiting_preview_approval?: boolean;
   awaiting_approval?: boolean;
 }
 
 export type RuntimeLifecycleState =
   | "idle"
   | "preparing"
+  | "awaiting_preview_approval"
   | "awaiting_approval"
   | "running"
   | "succeeded"
@@ -59,7 +81,9 @@ export interface RuntimeTerminalResult {
 export interface RunWithEventsResult {
   action_id: string;
   run_id: string;
-  approval: ApprovalToken;
+  approval?: ApprovalToken;
+  preview_approval?: ApprovalToken;
+  awaiting_preview_approval: boolean;
   awaiting_approval: boolean;
   terminal?: RuntimeTerminalResult;
 }

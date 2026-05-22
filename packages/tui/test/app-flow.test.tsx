@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { indbaseManifestFixture } from "@consoler/protocol";
+import { indbaseManifestFixture, indbaseManifestV1aFixture } from "@consoler/protocol";
 
 import { blocksFromEvents } from "../src/blocks.js";
 import {
@@ -15,6 +15,12 @@ describe("TUI flow helpers", () => {
     const values = defaultFormValues(fields);
     expect(values.hard_only).toBe(false);
     expect(values.vault_path).toBe("");
+  });
+
+  it("ingest form exposes vault_path and source_path fields", () => {
+    const ingest = indbaseManifestV1aFixture.commands.find((c) => c.name === "indbase.ingest_file")!;
+    const fields = fieldsFromCommand(ingest);
+    expect(fields.map((field) => field.name)).toEqual(["vault_path", "source_path"]);
   });
 
   it("submit flush merges pending vault_path before validation", () => {

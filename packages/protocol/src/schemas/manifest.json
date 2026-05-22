@@ -52,7 +52,10 @@
         "invalidates_on_context_change"
       ],
       "properties": {
-        "preview_kind": { "type": "string", "enum": ["static", "dynamic"] },
+        "preview_kind": {
+          "type": "string",
+          "enum": ["static", "dynamic", "probe_readonly"]
+        },
         "requires_approval_before_preview": { "type": "boolean" },
         "preview_side_effects": {
           "type": "array",

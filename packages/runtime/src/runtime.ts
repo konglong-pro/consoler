@@ -11,17 +11,30 @@ import {
   type AgentManifest,
 } from "@consoler/protocol";
 
-import { buildApprovalToken, verifyApprovalStillValid } from "./approval.js";
+import {
+  buildApprovalToken,
+  buildPreviewApprovalToken,
+  verifyApprovalStillValid,
+  verifyPreviewApproval
+} from "./approval.js";
 import { buildContextSnapshot, contextSnapshotHash } from "./context-snapshot.js";
+import {
+  getCommandDef,
+  isProbeReadonlyPreview,
+  requiresPreviewApproval
+} from "./command-policy.js";
 import { ConsolerStore } from "./db/store.js";
 import { EventStore } from "./event-store.js";
 import type {
   CommandArgsInput,
   ConsolerRuntimeOptions,
+  PrepareActionOptions,
   PreparedAction,
+  PreviewLifecycleResult,
+  PreviewOptions,
   RuntimeEventHandlers,
-  RuntimeLifecycleState,
   RuntimeTerminalResult,
+  RunOptions,
   RunResult,
   RunWithEventsResult
 } from "./lifecycle-types.js";
@@ -33,10 +46,14 @@ import { JsonRpcAgentClient } from "./transport/jsonrpc.js";
 export type {
   CommandArgsInput,
   ConsolerRuntimeOptions,
+  PrepareActionOptions,
   PreparedAction,
+  PreviewLifecycleResult,
+  PreviewOptions,
   RuntimeEventHandlers,
   RuntimeLifecycleState,
   RuntimeTerminalResult,
+  RunOptions,
   RunResult,
   RunWithEventsResult
 } from "./lifecycle-types.js";
@@ -82,14 +99,51 @@ export class ConsolerRuntime {
     };
   }
 
-  async preview(input: CommandArgsInput): Promise<unknown> {
-    return this.fetchStaticPreview(input);
+  async preview(
+    input: CommandArgsInput,
+    options: PreviewOptions = {}
+  ): Promise<PreviewLifecycleResult> {
+    const manifest = await this.prepareManifest(input);
+    const command = getCommandDef(manifest, input.command);
+
+    if (!requiresPreviewApproval(command)) {
+      const preview = await this.fetchAgentPreview(input, manifest);
+      return { preview, awaiting_preview_approval: false };
+    }
+
+    if (!options.approvePreview) {
+      return {
+        awaiting_preview_approval: true,
+        preview_approval: buildPreviewApprovalToken({
+          manifest,
+          commandName: input.command,
+          args: input.args
+        })
+      };
+    }
+
+    const preview = await this.fetchAgentPreview(input, manifest);
+    return { preview, awaiting_preview_approval: false };
   }
 
-  async prepareAction(input: CommandArgsInput): Promise<PreparedAction> {
+  async prepareAction(
+    input: CommandArgsInput,
+    options: PrepareActionOptions = {}
+  ): Promise<PreparedAction> {
     const manifest = await this.prepareManifest(input);
+    const commandDef = getCommandDef(manifest, input.command);
     const draft = this.createDraft(input);
     const entry = getEnabledAgent(loadRegistry(this.rootDir), input.agentId);
+
+    let preview: unknown;
+    if (isProbeReadonlyPreview(commandDef)) {
+      if (options.probePreview === undefined) {
+        throw new Error("Probe preview is required before prepareAction for probe_readonly commands");
+      }
+      preview = options.probePreview;
+    } else {
+      preview = await this.fetchAgentPreview(input, manifest);
+    }
 
     const client = this.spawnClient(entry);
     const { plan, planHash } = await this.withClient(client, async () => {
@@ -105,7 +159,6 @@ export class ConsolerRuntime {
       })) as { steps: ActionPlan["steps"]; side_effects?: string[] };
 
       const snapshot = buildContextSnapshot({ entry, manifest, args: draft.args });
-      const commandDef = manifest.commands.find((item) => item.name === input.command)!;
       const plan: ActionPlan = {
         plan_id: newPlanId(),
         action_id: draft.action_id,
@@ -123,7 +176,6 @@ export class ConsolerRuntime {
       return { plan, planHash };
     });
 
-    const preview = await this.fetchStaticPreview(input);
     const approval = buildApprovalToken({
       actionId: draft.action_id,
       manifest,
@@ -202,11 +254,34 @@ export class ConsolerRuntime {
 
   async runWithEvents(
     input: CommandArgsInput,
-    options: { approve?: boolean } = {},
+    options: RunOptions = {},
     handlers: RuntimeEventHandlers = {}
   ): Promise<RunWithEventsResult> {
+    const manifest = await this.prepareManifest(input);
+    const commandDef = getCommandDef(manifest, input.command);
+    let probePreview: unknown | undefined;
+
+    if (requiresPreviewApproval(commandDef)) {
+      if (!options.approvePreview) {
+        handlers.onStateChange?.("awaiting_preview_approval");
+        return {
+          action_id: "",
+          run_id: "",
+          preview_approval: buildPreviewApprovalToken({
+            manifest,
+            commandName: input.command,
+            args: input.args
+          }),
+          awaiting_preview_approval: true,
+          awaiting_approval: false
+        };
+      }
+      handlers.onStateChange?.("preparing");
+      probePreview = await this.fetchAgentPreview(input, manifest);
+    }
+
     handlers.onStateChange?.("preparing");
-    const prepared = await this.prepareAction(input);
+    const prepared = await this.prepareAction(input, { probePreview });
     handlers.onStateChange?.("awaiting_approval");
 
     if (!options.approve) {
@@ -214,6 +289,7 @@ export class ConsolerRuntime {
         action_id: prepared.action.action_id,
         run_id: "",
         approval: prepared.approval,
+        awaiting_preview_approval: false,
         awaiting_approval: true
       };
     }
@@ -223,19 +299,23 @@ export class ConsolerRuntime {
       action_id: prepared.action.action_id,
       run_id: terminal.run_id,
       approval: prepared.approval,
+      awaiting_preview_approval: false,
       awaiting_approval: false,
       terminal
     };
   }
 
-  async run(input: CommandArgsInput, options: { approve?: boolean } = {}): Promise<RunResult> {
+  async run(input: CommandArgsInput, options: RunOptions = {}): Promise<RunResult> {
     const result = await this.runWithEvents(input, options);
-    return {
+    const output: RunResult = {
       action_id: result.action_id,
       run_id: result.run_id,
-      approval: result.approval,
+      awaiting_preview_approval: result.awaiting_preview_approval,
       awaiting_approval: result.awaiting_approval
     };
+    if (result.approval) output.approval = result.approval;
+    if (result.preview_approval) output.preview_approval = result.preview_approval;
+    return output;
   }
 
   ingestAgentEvent(runId: string, actionId: string, agentId: string, command: string, raw: unknown) {
@@ -250,8 +330,11 @@ export class ConsolerRuntime {
     return replayAction(this.store, actionId);
   }
 
-  private async fetchStaticPreview(input: CommandArgsInput): Promise<unknown> {
-    await this.prepareManifest(input);
+  private async fetchAgentPreview(
+    input: CommandArgsInput,
+    manifest?: AgentManifest
+  ): Promise<unknown> {
+    const resolvedManifest = manifest ?? (await this.prepareManifest(input));
     const entry = getEnabledAgent(loadRegistry(this.rootDir), input.agentId);
     const client = this.spawnClient(entry);
     return this.withClient(client, async () =>
@@ -312,7 +395,7 @@ function previewSummary(preview: unknown): string {
   if (typeof preview === "object" && preview && "summary" in preview) {
     return String((preview as Record<string, unknown>).summary);
   }
-  return "static preview";
+  return "preview";
 }
 
 function terminalStateFromEvents(
