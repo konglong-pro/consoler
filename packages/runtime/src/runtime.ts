@@ -6,37 +6,40 @@ import {
   validateCommandArgs,
   validateManifest,
   type ActionDraft,
+  type ActionEvent,
   type ActionPlan,
   type AgentManifest,
-  type ApprovalToken,
-  type RegistryAgentEntry
 } from "@consoler/protocol";
 
 import { buildApprovalToken, verifyApprovalStillValid } from "./approval.js";
 import { buildContextSnapshot, contextSnapshotHash } from "./context-snapshot.js";
 import { ConsolerStore } from "./db/store.js";
 import { EventStore } from "./event-store.js";
+import type {
+  CommandArgsInput,
+  ConsolerRuntimeOptions,
+  PreparedAction,
+  RuntimeEventHandlers,
+  RuntimeLifecycleState,
+  RuntimeTerminalResult,
+  RunResult,
+  RunWithEventsResult
+} from "./lifecycle-types.js";
 import { computePlanHash } from "./plan-hash.js";
 import { formatReplayTimeline, replayAction } from "./replay.js";
 import { getEnabledAgent, loadRegistry } from "./registry.js";
 import { JsonRpcAgentClient } from "./transport/jsonrpc.js";
 
-export interface ConsolerRuntimeOptions {
-  rootDir?: string;
-}
-
-export interface CommandArgsInput {
-  agentId: string;
-  command: string;
-  args: Record<string, unknown>;
-}
-
-export interface RunResult {
-  action_id: string;
-  run_id: string;
-  approval?: ApprovalToken;
-  awaiting_approval?: boolean;
-}
+export type {
+  CommandArgsInput,
+  ConsolerRuntimeOptions,
+  PreparedAction,
+  RuntimeEventHandlers,
+  RuntimeLifecycleState,
+  RuntimeTerminalResult,
+  RunResult,
+  RunWithEventsResult
+} from "./lifecycle-types.js";
 
 export class ConsolerRuntime {
   readonly store: ConsolerStore;
@@ -71,12 +74,25 @@ export class ConsolerRuntime {
   }
 
   async plan(input: CommandArgsInput): Promise<{ action: ActionDraft; plan: ActionPlan; plan_hash: string }> {
+    const prepared = await this.prepareAction(input);
+    return {
+      action: prepared.action,
+      plan: prepared.plan,
+      plan_hash: prepared.plan_hash
+    };
+  }
+
+  async preview(input: CommandArgsInput): Promise<unknown> {
+    return this.fetchStaticPreview(input);
+  }
+
+  async prepareAction(input: CommandArgsInput): Promise<PreparedAction> {
     const manifest = await this.prepareManifest(input);
     const draft = this.createDraft(input);
     const entry = getEnabledAgent(loadRegistry(this.rootDir), input.agentId);
 
     const client = this.spawnClient(entry);
-    return this.withClient(client, async () => {
+    const { plan, planHash } = await this.withClient(client, async () => {
       await client.request("agent.validate", {
         command: input.command,
         args: draft.args
@@ -104,76 +120,122 @@ export class ConsolerRuntime {
       const planHash = computePlanHash(plan);
       this.store.saveContext(snapshot, contextSnapshotHash(snapshot), draft.action_id, input.agentId, input.command);
       this.store.savePlan(plan, planHash);
-      return { action: draft, plan, plan_hash: planHash };
+      return { plan, planHash };
     });
-  }
-
-  async preview(input: CommandArgsInput): Promise<unknown> {
-    return this.fetchStaticPreview(input);
-  }
-
-  async run(input: CommandArgsInput, options: { approve?: boolean } = {}): Promise<RunResult> {
-    const manifest = await this.prepareManifest(input);
-    const { action, plan } = await this.plan(input);
-    const entry = getEnabledAgent(loadRegistry(this.rootDir), input.agentId);
 
     const preview = await this.fetchStaticPreview(input);
-
     const approval = buildApprovalToken({
-      actionId: action.action_id,
+      actionId: draft.action_id,
       manifest,
       commandName: input.command,
       args: input.args,
       plan,
       preview,
-      previewSummary: typeof preview === "object" && preview && "summary" in preview
-        ? String((preview as Record<string, unknown>).summary)
-        : "static preview"
+      previewSummary: previewSummary(preview)
     });
 
-    if (!options.approve) {
-      return {
-        action_id: action.action_id,
-        run_id: "",
-        approval,
-        awaiting_approval: true
-      };
-    }
-
-    const driftReason = verifyApprovalStillValid(
-      approval,
-      { entry, manifest, args: input.args },
+    return {
+      action: draft,
       plan,
-      preview
+      plan_hash: planHash,
+      preview,
+      approval,
+      manifest,
+      entry
+    };
+  }
+
+  async executePrepared(
+    prepared: PreparedAction,
+    handlers: RuntimeEventHandlers = {}
+  ): Promise<RuntimeTerminalResult> {
+    const driftReason = verifyApprovalStillValid(
+      prepared.approval,
+      { entry: prepared.entry, manifest: prepared.manifest, args: prepared.action.args },
+      prepared.plan,
+      prepared.preview
     );
     if (driftReason) {
       throw new Error(`Approval invalid: ${driftReason}`);
     }
 
+    handlers.onStateChange?.("running");
     const runId = newRunId();
-    this.store.saveApproval(approval);
-    this.store.createRun(runId, action.action_id, input.agentId, input.command);
+    this.store.saveApproval(prepared.approval);
+    this.store.createRun(runId, prepared.action.action_id, prepared.action.agent_id, prepared.action.command);
 
-    const execClient = this.spawnClient(entry, (notification) => {
+    const acceptedEvents: ActionEvent[] = [];
+    const execClient = this.spawnClient(prepared.entry, (notification) => {
       if (notification.method !== "agent.event") return;
-      const event = notification.params?.["event"];
-      if (event) {
-        this.events.ingest(runId, action.action_id, input.agentId, input.command, event);
+      const raw = notification.params?.["event"];
+      if (!raw) return;
+      const ingest = this.events.ingest(
+        runId,
+        prepared.action.action_id,
+        prepared.action.agent_id,
+        prepared.action.command,
+        raw
+      );
+      if (ingest.accepted && ingest.event) {
+        acceptedEvents.push(ingest.event);
+        handlers.onEvent?.(ingest.event, ingest);
+      } else if (ingest.event) {
+        handlers.onEvent?.(ingest.event, ingest);
       }
     });
 
     await this.withClient(execClient, async () => {
       await execClient.request("agent.execute", {
-        action_id: action.action_id,
+        action_id: prepared.action.action_id,
         run_id: runId,
-        command: input.command,
-        args: input.args,
-        plan,
-        approval
+        command: prepared.action.command,
+        args: prepared.action.args,
+        plan: prepared.plan,
+        approval: prepared.approval
       });
     });
 
-    return { action_id: action.action_id, run_id: runId, approval };
+    const terminal = terminalStateFromEvents(acceptedEvents);
+    handlers.onStateChange?.(terminal);
+    return { run_id: runId, state: terminal, events: acceptedEvents };
+  }
+
+  async runWithEvents(
+    input: CommandArgsInput,
+    options: { approve?: boolean } = {},
+    handlers: RuntimeEventHandlers = {}
+  ): Promise<RunWithEventsResult> {
+    handlers.onStateChange?.("preparing");
+    const prepared = await this.prepareAction(input);
+    handlers.onStateChange?.("awaiting_approval");
+
+    if (!options.approve) {
+      return {
+        action_id: prepared.action.action_id,
+        run_id: "",
+        approval: prepared.approval,
+        awaiting_approval: true
+      };
+    }
+
+    const terminal = await this.executePrepared(prepared, handlers);
+    return {
+      action_id: prepared.action.action_id,
+      run_id: terminal.run_id,
+      approval: prepared.approval,
+      awaiting_approval: false,
+      terminal
+    };
+  }
+
+  async run(input: CommandArgsInput, options: { approve?: boolean } = {}): Promise<RunResult> {
+    const result = await this.runWithEvents(input, options);
+    return {
+      action_id: result.action_id,
+      run_id: result.run_id,
+      approval: result.approval,
+      awaiting_approval: result.awaiting_approval
+    };
   }
 
   ingestAgentEvent(runId: string, actionId: string, agentId: string, command: string, raw: unknown) {
@@ -181,11 +243,13 @@ export class ConsolerRuntime {
   }
 
   replay(actionId: string): string {
-    const timeline = replayAction(this.store, actionId);
-    return formatReplayTimeline(timeline);
+    return formatReplayTimeline(replayAction(this.store, actionId));
   }
 
-  /** Schema-only + agent static preview. No plan, context snapshot, or agent.validate. */
+  getReplay(actionId: string) {
+    return replayAction(this.store, actionId);
+  }
+
   private async fetchStaticPreview(input: CommandArgsInput): Promise<unknown> {
     await this.prepareManifest(input);
     const entry = getEnabledAgent(loadRegistry(this.rootDir), input.agentId);
@@ -227,7 +291,7 @@ export class ConsolerRuntime {
   }
 
   private spawnClient(
-    entry: RegistryAgentEntry,
+    entry: PreparedAction["entry"],
     onNotification?: (notification: import("./transport/jsonrpc.js").JsonRpcNotification) => void
   ): JsonRpcAgentClient {
     return onNotification
@@ -242,4 +306,23 @@ export class ConsolerRuntime {
       client.kill();
     }
   }
+}
+
+function previewSummary(preview: unknown): string {
+  if (typeof preview === "object" && preview && "summary" in preview) {
+    return String((preview as Record<string, unknown>).summary);
+  }
+  return "static preview";
+}
+
+function terminalStateFromEvents(
+  events: ActionEvent[]
+): RuntimeTerminalResult["state"] {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i]!;
+    if (event.type === "action.succeeded") return "succeeded";
+    if (event.type === "action.failed") return "failed";
+    if (event.type === "action.cancelled") return "cancelled";
+  }
+  return "failed";
 }

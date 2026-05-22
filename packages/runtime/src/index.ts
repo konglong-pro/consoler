@@ -1,4 +1,14 @@
-export { ConsolerRuntime, type CommandArgsInput, type ConsolerRuntimeOptions, type RunResult } from "./runtime.js";
+export {
+  ConsolerRuntime,
+  type CommandArgsInput,
+  type ConsolerRuntimeOptions,
+  type PreparedAction,
+  type RuntimeEventHandlers,
+  type RuntimeLifecycleState,
+  type RuntimeTerminalResult,
+  type RunResult,
+  type RunWithEventsResult
+} from "./runtime.js";
 export { ConsolerStore } from "./db/store.js";
 export { computePlanHash, computePreviewHash, computeSideEffectsHash } from "./plan-hash.js";
 export { buildApprovalToken, verifyApprovalStillValid } from "./approval.js";

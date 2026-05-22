@@ -13,7 +13,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - `packages/protocol/`: planned TypeScript protocol types, JSON Schemas, and validators.
 - `packages/runtime/`: planned TypeScript runtime core: registry, process manager, transport, planner, approval, event store, replay.
 - `packages/agentctl/`: planned headless CLI for protocol debugging before TUI work.
-- `packages/tui/`: planned Ink TUI. Do not start here for runtime/protocol work.
+- `packages/tui/`: Ink TUI (V0b). Depends on runtime prepared-action APIs.
 - `sdks/python/`: planned minimal Python SDK for out-of-process agents.
 - `E:\indbase`: first real agent host repo. `indbase-agent` code belongs there, not in this repo.
 
@@ -24,8 +24,11 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Test all: `pnpm test`
 - Python SDK tests: `pnpm test:python-sdk`
 - Single package test: `pnpm --filter @consoler/protocol test`
+- TUI package test: `pnpm --filter @consoler/tui test`
 - Typecheck: `pnpm typecheck`
 - Build: `pnpm build`
+- TUI: `pnpm tui --` (schema form, approval, live events)
+- TUI replay: `pnpm tui -- --replay <action_id>`
 - Planned indbase agent command: from `E:\indbase`, `uv run python -m indbase_agent` after that adapter exists.
 
 Prefer narrow validation for the changed package before broad checks.
@@ -35,7 +38,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Protocol shape or object contracts: start in `docs/adr/0001-agent-protocol-v0-boundaries.md`, then `packages/protocol/`.
 - Runtime lifecycle, approval, event store, replay: start in `docs/planning/v0-indbase-doctor-tracer-bullet.md`, then `packages/runtime/`.
 - Headless debugging CLI: start in `packages/agentctl/`; it must call the same runtime as the TUI.
-- TUI behavior: start only after `agentctl` can run the v0 tracer bullet; keep it action timeline focused.
+- V0b TUI behavior: start in `docs/planning/v0b-minimal-tui.md`; implement runtime prepared-action APIs before UI state.
 - Python agent SDK: start in `sdks/python/`; implement only what `indbase.doctor` needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -56,8 +59,10 @@ Prefer narrow validation for the changed package before broad checks.
   3. Run an `indbase.doctor` end-to-end smoke before claiming integration works.
 
 - TUI change:
-  1. Verify behavior against recorded event replay when available.
-  2. Do not rely on TUI-only manual testing if `agentctl` exposes the same lifecycle.
+  1. Add or update focused tests under `packages/tui/` once that package exists.
+  2. Verify behavior against recorded event replay.
+  3. Run `agentctl` lifecycle checks if runtime behavior changed.
+  4. Do a manual TUI smoke for form -> approval -> live events -> result -> replay.
 
 ## Architecture Constraints
 
@@ -81,6 +86,7 @@ Prefer narrow validation for the changed package before broad checks.
 
 - `docs/adr/0001-agent-protocol-v0-boundaries.md`: accepted v0 architecture boundaries and non-goals.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
+- `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 
 ## Done Means
 

@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.18.1",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
   "scripts": {
     "agentctl": "pnpm --filter @consoler/agentctl start",
+    "tui": "pnpm --filter @consoler/tui start",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",
