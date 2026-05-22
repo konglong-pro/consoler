@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.vitest/
+.turbo/
+
+.consoler/*.db
+.consoler/*.db-*
+
+__pycache__/
+.pytest_cache/
+.venv/
+
+*.log

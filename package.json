@@ -1,0 +1,23 @@
+{
+  "name": "consoler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.1",
+  "scripts": {
+    "agentctl": "pnpm --filter @consoler/agentctl start",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:python-sdk": "node scripts/test-python-sdk.mjs",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

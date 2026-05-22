@@ -1,0 +1,174 @@
+export type PreviewKind = "static" | "dynamic";
+
+export type RenderableBlockType = "markdown" | "table" | "json" | "error";
+
+export type ActionEventType =
+  | "action.started"
+  | "step.started"
+  | "step.completed"
+  | "progress.updated"
+  | "log"
+  | "action.succeeded"
+  | "action.failed"
+  | "action.cancelled";
+
+export const TERMINAL_EVENT_TYPES: ReadonlySet<ActionEventType> = new Set([
+  "action.succeeded",
+  "action.failed",
+  "action.cancelled"
+]);
+
+export interface Permission {
+  kind: string;
+  scope?: string;
+  description?: string;
+}
+
+export interface PreviewPolicy {
+  preview_kind: PreviewKind;
+  requires_approval_before_preview: boolean;
+  preview_side_effects: string[];
+  invalidates_on_context_change: boolean;
+}
+
+export interface AgentCommand {
+  name: string;
+  description: string;
+  args_schema: Record<string, unknown>;
+  preview_policy: PreviewPolicy;
+  side_effects: string[];
+  permissions: Permission[];
+}
+
+export interface AgentManifest {
+  agent_id: string;
+  name: string;
+  version: string;
+  protocol_version: string;
+  commands: AgentCommand[];
+}
+
+export interface ActionDraft {
+  action_id: string;
+  agent_id: string;
+  command: string;
+  args: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PlanStep {
+  step_id: string;
+  title: string;
+  description?: string;
+}
+
+export interface ContextSnapshot {
+  snapshot_id: string;
+  kind: "composite";
+  summary: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ActionPlan {
+  plan_id: string;
+  action_id: string;
+  agent_id: string;
+  command: string;
+  steps: PlanStep[];
+  context_snapshot_id: string;
+  context_snapshot: ContextSnapshot;
+  side_effects: string[];
+  created_at: string;
+}
+
+export interface ApprovalMaterial {
+  agent_id: string;
+  agent_version: string;
+  command: string;
+  normalized_args: Record<string, unknown>;
+  plan_summary: string;
+  context_summary: string;
+  side_effects: string[];
+  preview_summary?: string;
+}
+
+export interface ApprovalToken {
+  approval_id: string;
+  action_id: string;
+  agent_id: string;
+  command: string;
+  args_hash: string;
+  plan_hash: string;
+  context_snapshot_hash: string;
+  side_effects_hash: string;
+  preview_hash?: string;
+  material: ApprovalMaterial;
+  created_at: string;
+}
+
+export interface RenderableBlock {
+  block_id: string;
+  type: RenderableBlockType;
+  title?: string;
+  content: unknown;
+}
+
+export interface AgentError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  retryable?: boolean;
+}
+
+export interface ActionEvent {
+  event_id: string;
+  run_id: string;
+  action_id: string;
+  agent_id: string;
+  command: string;
+  type: ActionEventType;
+  seq: number;
+  epoch: number;
+  timestamp: string;
+  step_id?: string;
+  message?: string;
+  progress?: number;
+  blocks?: RenderableBlock[];
+  error?: AgentError;
+  payload?: Record<string, unknown>;
+}
+
+export interface JsonRpcRequest {
+  jsonrpc: "2.0";
+  id: string | number;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+export interface JsonRpcResponse {
+  jsonrpc: "2.0";
+  id: string | number | null;
+  result?: unknown;
+  error?: JsonRpcError;
+}
+
+export interface JsonRpcError {
+  code: number;
+  message: string;
+  data?: AgentError | Record<string, unknown>;
+}
+
+export interface RegistryAgentEntry {
+  agent_id: string;
+  name: string;
+  cwd: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  enabled: boolean;
+}
+
+export interface AgentsRegistryFile {
+  agents: RegistryAgentEntry[];
+}
