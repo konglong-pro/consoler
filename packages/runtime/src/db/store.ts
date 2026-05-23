@@ -14,6 +14,7 @@ import type {
 import { hashCanonical } from "@consoler/protocol";
 
 import { databasePath } from "../paths.js";
+import { HISTORY_INDEXES_SQL } from "./indexes.js";
 import { SCHEMA_SQL } from "./schema.js";
 
 export interface StoredEvent {
@@ -42,6 +43,7 @@ export class ConsolerStore {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.exec(SCHEMA_SQL);
+    this.db.exec(HISTORY_INDEXES_SQL);
   }
 
   upsertRegistryAgent(entry: RegistryAgentEntry): void {
@@ -289,5 +291,150 @@ export class ConsolerStore {
       )
       .get(runId);
     return Boolean(row);
+  }
+
+  hasPlan(actionId: string): boolean {
+    const row = this.db.prepare(`SELECT 1 FROM plans WHERE action_id = ? LIMIT 1`).get(actionId);
+    return Boolean(row);
+  }
+
+  hasContext(actionId: string): boolean {
+    const row = this.db.prepare(`SELECT 1 FROM contexts WHERE action_id = ? LIMIT 1`).get(actionId);
+    return Boolean(row);
+  }
+
+  hasApproval(actionId: string): boolean {
+    const row = this.db.prepare(`SELECT 1 FROM approvals WHERE action_id = ? LIMIT 1`).get(actionId);
+    return Boolean(row);
+  }
+
+  listRunsForAction(actionId: string): Array<{
+    run_id: string;
+    action_id: string;
+    agent_id: string;
+    command: string;
+    status: string;
+    started_at: string;
+    ended_at: string | null;
+  }> {
+    return this.db
+      .prepare(
+        `SELECT run_id, action_id, agent_id, command, status, started_at, ended_at
+         FROM runs WHERE action_id = ? ORDER BY started_at DESC`
+      )
+      .all(actionId) as Array<{
+      run_id: string;
+      action_id: string;
+      agent_id: string;
+      command: string;
+      status: string;
+      started_at: string;
+      ended_at: string | null;
+    }>;
+  }
+
+  listApprovalsForAction(actionId: string): ApprovalToken[] {
+    const rows = this.db
+      .prepare(
+        `SELECT approval_id, action_id, agent_id, command, args_hash, plan_hash,
+                context_snapshot_hash, side_effects_hash, preview_hash, material_json, created_at
+         FROM approvals WHERE action_id = ? ORDER BY created_at ASC`
+      )
+      .all(actionId) as Array<{
+      approval_id: string;
+      action_id: string;
+      agent_id: string;
+      command: string;
+      args_hash: string;
+      plan_hash: string;
+      context_snapshot_hash: string;
+      side_effects_hash: string;
+      preview_hash: string | null;
+      material_json: string;
+      created_at: string;
+    }>;
+    return rows.map((row) => {
+      const token: ApprovalToken = {
+        approval_id: row.approval_id,
+        action_id: row.action_id,
+        agent_id: row.agent_id,
+        command: row.command,
+        scope: "execute",
+        args_hash: row.args_hash,
+        plan_hash: row.plan_hash,
+        context_snapshot_hash: row.context_snapshot_hash,
+        side_effects_hash: row.side_effects_hash,
+        material: JSON.parse(row.material_json) as ApprovalToken["material"],
+        created_at: row.created_at
+      };
+      if (row.preview_hash) token.preview_hash = row.preview_hash;
+      return token;
+    });
+  }
+
+  countEventsForAction(actionId: string): { accepted: number; rejected: number } {
+    const row = this.db
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN accepted = 1 THEN 1 ELSE 0 END) AS accepted,
+           SUM(CASE WHEN accepted = 0 THEN 1 ELSE 0 END) AS rejected
+         FROM events WHERE action_id = ?`
+      )
+      .get(actionId) as { accepted: number | null; rejected: number | null } | undefined;
+    return {
+      accepted: row?.accepted ?? 0,
+      rejected: row?.rejected ?? 0
+    };
+  }
+
+  listRecentActions(limit: number, command?: string): Array<{
+    action_id: string;
+    agent_id: string;
+    command: string;
+    args_json: string;
+    created_at: string;
+    latest_run_id: string | null;
+    latest_run_status: string | null;
+  }> {
+    const clauses: string[] = [];
+    const params: Record<string, unknown> = { limit };
+    if (command) {
+      clauses.push("a.command = @command");
+      params.command = command;
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+    return this.db
+      .prepare(
+        `SELECT
+           a.action_id,
+           a.agent_id,
+           a.command,
+           a.args_json,
+           a.created_at,
+           lr.run_id AS latest_run_id,
+           lr.status AS latest_run_status
+         FROM actions a
+         LEFT JOIN (
+           SELECT r1.run_id, r1.action_id, r1.status
+           FROM runs r1
+           INNER JOIN (
+             SELECT action_id, MAX(started_at) AS max_started
+             FROM runs
+             GROUP BY action_id
+           ) latest ON latest.action_id = r1.action_id AND latest.max_started = r1.started_at
+         ) lr ON lr.action_id = a.action_id
+         ${where}
+         ORDER BY a.created_at DESC
+         LIMIT @limit`
+      )
+      .all(params) as Array<{
+      action_id: string;
+      agent_id: string;
+      command: string;
+      args_json: string;
+      created_at: string;
+      latest_run_id: string | null;
+      latest_run_status: string | null;
+    }>;
   }
 }

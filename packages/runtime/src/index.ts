@@ -29,6 +29,24 @@ export {
 } from "./command-policy.js";
 export { buildContextSnapshot, contextDrift, contextSnapshotHash } from "./context-snapshot.js";
 export { replayAction, formatReplayTimeline } from "./replay.js";
+export type {
+  ActionHistoryEntry,
+  ActionHistoryStatus,
+  ActionRunSummary,
+  ActionTrace,
+  ListActionHistoryOptions,
+  RejectedEventRecord
+} from "./action-read-types.js";
+export {
+  deriveActionStatus,
+  getActionTrace,
+  listActionHistory,
+  resultBlocksFromEvents,
+  shortActionId,
+  summarizeArgs,
+  terminalStateFromAcceptedEvents
+} from "./action-read.js";
+export { formatActionHistory, formatActionTrace } from "./format-action-read.js";
 export { JsonRpcAgentClient, LineBufferParser, parseNdjsonLine } from "./transport/jsonrpc.js";
 export { loadRegistry, getEnabledAgent } from "./registry.js";
 export { consolerDataDir, databasePath, registryPath, findConsolerRoot } from "./paths.js";

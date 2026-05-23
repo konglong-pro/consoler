@@ -1,0 +1,94 @@
+import type { ActionHistoryEntry, ActionTrace } from "./action-read-types.js";
+import { shortActionId } from "./action-read.js";
+
+export function formatActionHistory(entries: ActionHistoryEntry[]): string {
+  if (entries.length === 0) {
+    return "No actions in history.";
+  }
+  const lines = ["Recent actions:", ""];
+  for (const entry of entries) {
+    lines.push(
+      `${shortActionId(entry.action_id)}  ${entry.command}  ${entry.status}  run=${entry.latest_run_id ?? "-"}`
+    );
+    lines.push(
+      `  created=${entry.created_at}  events=${entry.accepted_event_count}/${entry.rejected_event_count} rejected`
+    );
+    lines.push(`  args: ${entry.args_summary}`);
+    if (entry.has_plan || entry.has_context || entry.has_approval) {
+      lines.push(
+        `  artifacts: plan=${entry.has_plan} context=${entry.has_context} approval=${entry.has_approval}`
+      );
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
+export function formatActionTrace(trace: ActionTrace): string {
+  const lines = [
+    `Trace for action ${trace.action.action_id}`,
+    `Command: ${trace.action.command} (${trace.action.agent_id})`,
+    `Created: ${trace.action.created_at}`,
+    `Status: ${trace.terminal_state ?? "prepared"}`,
+    ""
+  ];
+
+  lines.push("Args:");
+  lines.push(`  ${JSON.stringify(trace.action.args)}`);
+  lines.push("");
+
+  if (trace.plan) {
+    lines.push(`Plan (${trace.plan.plan_hash.slice(0, 12)}…):`);
+    for (const step of trace.plan.plan.steps) {
+      lines.push(`  - ${step.title}`);
+    }
+    lines.push("");
+  }
+
+  if (trace.context) {
+    lines.push(`Context (${trace.context.snapshot_hash.slice(0, 12)}…): ${trace.context.snapshot.summary}`);
+    lines.push("");
+  }
+
+  if (trace.approvals.length) {
+    lines.push("Approvals:");
+    for (const approval of trace.approvals) {
+      lines.push(`  ${approval.approval_id} scope=${approval.scope}`);
+      lines.push(`    ${approval.material.plan_summary}`);
+    }
+    lines.push("");
+  }
+
+  if (trace.runs.length) {
+    lines.push("Runs:");
+    for (const run of trace.runs) {
+      lines.push(
+        `  ${run.run_id} status=${run.status} started=${run.started_at}${run.ended_at ? ` ended=${run.ended_at}` : ""}`
+      );
+    }
+    lines.push("");
+  }
+
+  lines.push(`Accepted events (${trace.accepted_events.length}):`);
+  for (const event of trace.accepted_events) {
+    lines.push(`  [${event.seq}] ${event.type}${event.message ? `: ${event.message}` : ""}`);
+  }
+  lines.push("");
+
+  lines.push(`Rejected events (${trace.rejected_events.length}):`);
+  for (const rejected of trace.rejected_events) {
+    lines.push(
+      `  [${rejected.seq ?? "?"}] ${rejected.type} reason=${rejected.reject_reason ?? "unknown"}`
+    );
+  }
+  lines.push("");
+
+  if (trace.result_blocks.length) {
+    lines.push(`Result blocks (${trace.result_blocks.length}):`);
+    for (const block of trace.result_blocks) {
+      lines.push(`  ${block.type} (${block.block_id})`);
+    }
+  }
+
+  return lines.join("\n").trimEnd();
+}

@@ -39,6 +39,9 @@ import type {
   RunWithEventsResult
 } from "./lifecycle-types.js";
 import { computePlanHash } from "./plan-hash.js";
+import { getActionTrace, listActionHistory } from "./action-read.js";
+import type { ListActionHistoryOptions } from "./action-read-types.js";
+import { formatActionHistory, formatActionTrace } from "./format-action-read.js";
 import { formatReplayTimeline, replayAction } from "./replay.js";
 import { getEnabledAgent, loadRegistry } from "./registry.js";
 import { JsonRpcAgentClient } from "./transport/jsonrpc.js";
@@ -328,6 +331,22 @@ export class ConsolerRuntime {
 
   getReplay(actionId: string) {
     return replayAction(this.store, actionId);
+  }
+
+  listActionHistory(options: ListActionHistoryOptions = {}) {
+    return listActionHistory(this.store, options);
+  }
+
+  getActionTrace(actionId: string) {
+    return getActionTrace(this.store, actionId);
+  }
+
+  formatActionHistory(options: ListActionHistoryOptions = {}) {
+    return formatActionHistory(listActionHistory(this.store, options));
+  }
+
+  formatActionTrace(actionId: string) {
+    return formatActionTrace(getActionTrace(this.store, actionId));
   }
 
   private async fetchAgentPreview(

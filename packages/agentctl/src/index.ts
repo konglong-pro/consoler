@@ -8,12 +8,16 @@ export function formatAgentctlHelp(): string {
     "  preview <agent_id> <command> --args <path> [--approve-preview]",
     "  run <agent_id> <command> --args <path> [--approve-preview] [--approve]",
     "  replay <action_id>",
+    "  history [--limit 20] [--command <name>] [--status <status>] [--json]",
+    "  trace <action_id> [--json]",
     "",
     "Examples:",
     "  pnpm agentctl -- discover indbase",
     "  pnpm agentctl -- run indbase indbase.doctor --args args.json --approve",
     "  pnpm agentctl -- preview indbase indbase.ingest_file --args ingest-args.json",
     "  pnpm agentctl -- run indbase indbase.ingest_file --args ingest-args.json --approve-preview --approve",
-    "  pnpm agentctl -- replay act_<uuid>"
+    "  pnpm agentctl -- replay act_<uuid>",
+    "  pnpm agentctl -- history --limit 10",
+    "  pnpm agentctl -- trace act_<uuid> --json"
   ].join("\n");
 }

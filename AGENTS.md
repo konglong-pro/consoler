@@ -29,6 +29,10 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Build: `pnpm build`
 - TUI: `pnpm tui --` (manifest command select, dual approval for probe commands)
 - TUI replay: `pnpm tui -- --replay <action_id>`
+- TUI history: `pnpm tui --` → History → select action → Trace View
+- Action replay: `pnpm agentctl -- replay <action_id>`
+- Action history: `pnpm agentctl -- history [--limit 20] [--command <name>] [--status <status>] [--json]`
+- Action trace: `pnpm agentctl -- trace <action_id> [--json]`
 - Ingest preview: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json`
 - Ingest probe: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview`
 - Ingest run: `pnpm agentctl -- run indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview --approve`
@@ -43,6 +47,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Headless debugging CLI: start in `packages/agentctl/`; it must call the same runtime as the TUI.
 - V0b TUI behavior: start in `docs/planning/v0b-minimal-tui.md`; implement runtime prepared-action APIs before UI state.
 - V1a side-effect tracer (`indbase.ingest_file`): start in `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`; keep scope to one local file.
+- V1b action history / trace: start in `docs/planning/v1b-action-history-trace-browser.md`; keep it read-only and consoler-only.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -68,6 +73,13 @@ Prefer narrow validation for the changed package before broad checks.
   3. Run focused protocol/runtime/agentctl/TUI tests for preview approval, execution approval, and context drift.
   4. Run the `indbase.doctor` regression smoke and an `indbase.ingest_file` smoke against a disposable fixture vault.
 
+- History / trace change:
+  1. Read `docs/planning/v1b-action-history-trace-browser.md`.
+  2. Add or update focused runtime store/replay tests before UI work.
+  3. Verify `replay` remains accepted-events-only while trace includes rejected events.
+  4. Run focused runtime, agentctl, and TUI tests (including `packages/tui/test/history-trace-flow.test.tsx`), then `pnpm typecheck`.
+  5. Default CI runs `pnpm test` and `pnpm test:python-sdk`; it does not run real `indbase` agent smokes.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -83,6 +95,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Preview is part of the action lifecycle. If a preview reads or mutates real environment state, model and approve it explicitly.
 - Approval binds normalized args, plan, context snapshot, side effects, and preview hash when present.
 - Execution output is a structured event stream. Do not treat logs as progress.
+- History, trace, and replay are read-only. They must not spawn agents or re-read vault/source state.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -99,6 +112,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
+- `docs/planning/v1b-action-history-trace-browser.md`: read-only action history and trace browser brief.
 
 ## Done Means
 

@@ -6,12 +6,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { ActionEvent, ActionPlan, AgentManifest, RenderableBlock } from "@consoler/protocol";
 import type { AgentCommand, ApprovalToken } from "@consoler/protocol";
+import type { ActionHistoryEntry, ActionTrace } from "@consoler/runtime";
 import {
   ConsolerRuntime,
   requiresPreviewApproval,
   type PreparedAction,
   type RuntimeEventHandlers
 } from "@consoler/runtime";
+
+import { historyItemDetail, historyItemLabel } from "./history-label.js";
+import { TracePanel } from "./trace-panel.js";
 
 import { blocksFromEvents, EventLine, RenderableBlockView } from "./blocks.js";
 import {
@@ -30,7 +34,10 @@ const AGENT_ID = "indbase";
 
 type Phase =
   | "boot"
+  | "home"
   | "command_select"
+  | "history"
+  | "trace"
   | "form"
   | "preview_approval"
   | "prepared"
@@ -43,11 +50,17 @@ const TABS: TabId[] = ["logs", "events", "json", "replay"];
 
 export interface AppProps {
   replayActionId?: string;
+  /** Injected runtime (tests) */
+  runtime?: ConsolerRuntime;
+  /** Skip agent discover and open home with this manifest (tests) */
+  initialManifest?: AgentManifest;
+  /** Test-only: start on trace with JSON tab without keyboard navigation */
+  testTraceView?: { trace: ActionTrace; tab?: TabId };
 }
 
-export function App({ replayActionId }: AppProps) {
+export function App({ replayActionId, runtime: runtimeProp, initialManifest, testTraceView }: AppProps) {
   const { exit } = useApp();
-  const runtime = useMemo(() => new ConsolerRuntime(), []);
+  const runtime = useMemo(() => runtimeProp ?? new ConsolerRuntime(), [runtimeProp]);
 
   const [phase, setPhase] = useState<Phase>(replayActionId ? "replay" : "boot");
   const [tab, setTab] = useState<TabId>("events");
@@ -64,6 +77,8 @@ export function App({ replayActionId }: AppProps) {
   const [busy, setBusy] = useState(false);
   const [replayInput, setReplayInput] = useState(replayActionId ?? "");
   const [replayEvents, setReplayEvents] = useState<ActionEvent[]>([]);
+  const [historyEntries, setHistoryEntries] = useState<ActionHistoryEntry[]>([]);
+  const [trace, setTrace] = useState<ActionTrace | null>(null);
   const [focusedField, setFocusedField] = useState(0);
   const formValuesRef = useRef<Record<string, unknown>>({});
   const submitFlushRef = useRef(false);
@@ -75,19 +90,31 @@ export function App({ replayActionId }: AppProps) {
   }, [formValues]);
 
   useEffect(() => {
+    if (testTraceView) {
+      setTrace(testTraceView.trace);
+      setPhase("trace");
+      if (testTraceView.tab) setTab(testTraceView.tab);
+      if (initialManifest) setManifest(initialManifest);
+      return;
+    }
     if (replayActionId) {
       loadReplay(replayActionId);
       return;
     }
+    if (initialManifest) {
+      setManifest(initialManifest);
+      setPhase("home");
+      return;
+    }
     void bootstrap();
-  }, [replayActionId]);
+  }, [replayActionId, initialManifest, testTraceView]);
 
   const bootstrap = async () => {
     try {
       setBusy(true);
       const m = await runtime.discover(AGENT_ID);
       setManifest(m);
-      setPhase("command_select");
+      setPhase("home");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -114,6 +141,27 @@ export function App({ replayActionId }: AppProps) {
     setError(null);
     setFocusedField(0);
     setPhase("form");
+  };
+
+  const loadHistory = () => {
+    try {
+      setHistoryEntries(runtime.listActionHistory({ limit: 20 }));
+      setPhase("history");
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const openTrace = (actionId: string) => {
+    try {
+      const payload = runtime.getActionTrace(actionId);
+      setTrace(payload);
+      setPhase("trace");
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const loadReplay = (actionId: string) => {
@@ -267,6 +315,24 @@ export function App({ replayActionId }: AppProps) {
     }
     if (key.escape) {
       setError(null);
+      if (phase === "trace") {
+        setTrace(null);
+        setPhase("history");
+        return;
+      }
+      if (phase === "history") {
+        setHistoryEntries([]);
+        setPhase("home");
+        return;
+      }
+      if (phase === "command_select" || phase === "form") {
+        setPhase("home");
+        return;
+      }
+      return;
+    }
+    if (phase === "trace" && input === "r" && trace) {
+      loadReplay(trace.action.action_id);
       return;
     }
     if (phase === "preview_approval" && input === "y" && !busy) {
@@ -296,6 +362,9 @@ export function App({ replayActionId }: AppProps) {
 
   const jsonPayload = useMemo(() => {
     if (tab !== "json") return "";
+    if (phase === "trace" && trace) {
+      return JSON.stringify(trace, null, 2);
+    }
     if (phase === "replay") {
       return JSON.stringify({ replay: replayInput, events: replayEvents }, null, 2);
     }
@@ -315,12 +384,19 @@ export function App({ replayActionId }: AppProps) {
       null,
       2
     );
-  }, [tab, phase, formValues, prepared, events, replayInput, replayEvents]);
+  }, [tab, phase, formValues, prepared, events, replayInput, replayEvents, trace]);
 
   return (
     <Box flexDirection="column" padding={1}>
       <Text bold color="green">
-        consoler TUI — {selectedCommand ?? "select command"}
+        consoler TUI —{" "}
+        {phase === "home"
+          ? "home"
+          : phase === "history"
+            ? "history"
+            : phase === "trace"
+              ? "trace"
+              : selectedCommand ?? "select command"}
       </Text>
       {busy ? (
         <Text color="yellow">
@@ -332,9 +408,48 @@ export function App({ replayActionId }: AppProps) {
       <Box flexDirection="column" marginTop={1} flexGrow={1}>
         {phase === "boot" ? <Text>Loading manifest...</Text> : null}
 
+        {phase === "home" ? (
+          <Box flexDirection="column">
+            <Text bold>Start</Text>
+            <SelectInput
+              items={[
+                { label: "New Action", value: "new" },
+                { label: "History", value: "history" }
+              ]}
+              onSelect={(item) => {
+                if (item.value === "history") loadHistory();
+                else setPhase("command_select");
+              }}
+            />
+          </Box>
+        ) : null}
+
+        {phase === "history" ? (
+          <Box flexDirection="column">
+            <Text bold>History (Enter open trace, Esc home)</Text>
+            {historyEntries.length === 0 ? (
+              <Text dimColor>No actions stored yet.</Text>
+            ) : (
+              <SelectInput
+                items={historyEntries.map((entry) => ({
+                  label: `${historyItemLabel(entry)}  ${historyItemDetail(entry)}`,
+                  value: entry.action_id
+                }))}
+                onSelect={(item) => openTrace(item.value)}
+              />
+            )}
+          </Box>
+        ) : null}
+
+        {phase === "trace" && trace ? (
+          <Box flexDirection="column">
+            <TracePanel trace={trace} />
+          </Box>
+        ) : null}
+
         {phase === "command_select" && manifest ? (
           <Box flexDirection="column">
-            <Text bold>Select command</Text>
+            <Text bold>Select command (Esc home)</Text>
             <SelectInput
               items={manifest.commands.map((command: AgentCommand) => ({
                 label: command.name,
@@ -466,10 +581,16 @@ export function App({ replayActionId }: AppProps) {
 
       <Box marginTop={1}>
         <Text dimColor>
-        {phase === "form"
-          ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
-          : "Tab bottom panels"}{" "}
-        | y/n approve | Esc clear | Ctrl+C exit
+        {phase === "home"
+          ? "Enter select | Esc —"
+          : phase === "history"
+            ? "Enter trace | Esc home"
+            : phase === "trace"
+              ? "r replay | Esc history | Ctrl+Tab JSON"
+              : phase === "form"
+                ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
+                : "Tab bottom panels"}{" "}
+        | y/n approve | Esc back | Ctrl+C exit
         </Text>
       </Box>
     </Box>

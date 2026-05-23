@@ -16,11 +16,19 @@ A preview that does not read the vault or call `agent.validate`. The runtime val
 
 ## Replay
 
-Reconstructing the accepted event timeline for a known `action_id` from SQLite. Replay does not spawn an agent and does not re-read the vault. V0b replay is by explicit id, not a browsable history list.
+Reconstructing the accepted event timeline for a known `action_id` from SQLite. Replay does not spawn an agent and does not re-read the vault. Replay uses accepted events only; rejected events are visible in trace, not replay.
+
+## Action History
+
+A read-only, action-centric list of recent prepared and executed actions from the local SQLite store. Each row summarizes command, derived status, latest run, timestamps, and accepted/rejected event counts. History does not spawn agents.
+
+## Trace View
+
+A read-only debugging surface for one `action_id`: action args, latest plan and context, execution approvals, runs, accepted events, rejected events (with `reject_reason`), and result blocks. Trace may include events replay omits. It does not re-read vault or source state.
 
 ## Runtime Lifecycle
 
-The ordered path managed by `@consoler/runtime`: discover, validate, plan, static preview, approval, execute, persist events, and optional replay. `agentctl` and the TUI share `prepareAction` and `executePrepared` so CLI and UI do not fork behavior.
+The ordered path managed by `@consoler/runtime`: discover, validate, plan, preview (static or probe), preview approval when required, execution approval, execute, persist events, and optional history/trace/replay reads. `agentctl` and the TUI share `prepareAction` and `executePrepared` so CLI and UI do not fork behavior.
 
 ## Probe Preview
 
