@@ -11,7 +11,8 @@
     "agentctl": "pnpm --filter @consoler/agentctl start",
     "tui": "pnpm --filter @consoler/tui start",
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "test": "pnpm -r --filter \"!@consoler/conformance\" test",
+    "test:conformance": "node scripts/test-conformance.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",
     "typecheck": "pnpm -r typecheck"
   },

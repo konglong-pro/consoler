@@ -53,3 +53,6 @@ jobs:
 
       - name: Test Python SDK
         run: pnpm test:python-sdk
+
+      - name: Test conformance harness
+        run: pnpm test:conformance

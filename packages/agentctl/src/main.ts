@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import { Command } from "commander";
 
+import { formatConformanceReport, runAgentConformance } from "@consoler/conformance";
 import { ConsolerRuntime, findConsolerRoot, type ActionHistoryStatus } from "@consoler/runtime";
 import path from "node:path";
 
@@ -95,6 +96,68 @@ program
     }
     console.log(JSON.stringify(result, null, 2));
   });
+
+program
+  .command("test")
+  .argument("<agent_id>", "Registered agent id")
+  .option("--command <name>", "Command-specific conformance mode")
+  .option("--args <path>", "Path to JSON args file (required with --command)")
+  .option("--approve-preview", "Approve probe preview before planning", false)
+  .option("--approve", "Approve and execute during conformance", false)
+  .option("--json", "Emit structured conformance report", false)
+  .description("Run agent protocol conformance checks (non-executing by default)")
+  .action(
+    async (
+      agentId: string,
+      options: {
+        command?: string;
+        args?: string;
+        approvePreview?: boolean;
+        approve?: boolean;
+        json?: boolean;
+      }
+    ) => {
+      if (options.command && !options.args) {
+        console.error("--command requires --args <path>");
+        process.exitCode = 1;
+        return;
+      }
+      if (options.args && !options.command) {
+        console.error("--args requires --command <name>");
+        process.exitCode = 1;
+        return;
+      }
+      if (options.approve && !options.command) {
+        console.error("--approve requires --command and --args");
+        process.exitCode = 1;
+        return;
+      }
+      if (options.approvePreview && !options.command) {
+        console.error("--approve-preview requires --command and --args");
+        process.exitCode = 1;
+        return;
+      }
+
+      const report = await runAgentConformance({
+        agentId,
+        registryRoot: findConsolerRoot(process.cwd()),
+        ...(options.command ? { command: options.command } : {}),
+        ...(options.args ? { args: loadArgs(options.args) } : {}),
+        approvePreview: Boolean(options.approvePreview),
+        approve: Boolean(options.approve),
+        cleanupTempRoot: true
+      });
+
+      if (options.json) {
+        console.log(JSON.stringify(report, null, 2));
+      } else {
+        console.log(formatConformanceReport(report));
+      }
+      if (!report.passed) {
+        process.exitCode = 1;
+      }
+    }
+  );
 
 program
   .command("replay")

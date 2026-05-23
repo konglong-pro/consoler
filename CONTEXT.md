@@ -18,6 +18,10 @@ A preview that does not read the vault or call `agent.validate`. The runtime val
 
 Reconstructing the accepted event timeline for a known `action_id` from SQLite. Replay does not spawn an agent and does not re-read the vault. Replay uses accepted events only; rejected events are visible in trace, not replay.
 
+## Conformance Harness
+
+A reusable, read-only compatibility suite that verifies an out-of-process agent speaks the current protocol: registry entry, health, discover, manifest validation, and optional command-specific plan/preview/execute checks. Default runs are non-executing; execution requires explicit approval flags.
+
 ## Action History
 
 A read-only, action-centric list of recent prepared and executed actions from the local SQLite store. Each row summarizes command, derived status, latest run, timestamps, and accepted/rejected event counts. History does not spawn agents.

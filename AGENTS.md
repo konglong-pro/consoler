@@ -13,6 +13,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - `packages/protocol/`: TypeScript protocol types, JSON Schemas, and validators.
 - `packages/runtime/`: TypeScript runtime core: registry, process manager, transport, planner, approval, event store, replay.
 - `packages/agentctl/`: headless CLI for protocol debugging and lifecycle smoke tests.
+- `packages/conformance/`: reusable agent protocol conformance harness and CI fake agent.
 - `packages/tui/`: Ink TUI (V0b). Depends on runtime prepared-action APIs.
 - `sdks/python/`: minimal Python SDK for out-of-process agents.
 - `E:\indbase`: first real agent host repo. `indbase-agent` code belongs there, not in this repo.
@@ -22,6 +23,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Install: `pnpm install`
 - Agentctl help/dev entry: `pnpm agentctl -- --help`
 - Test all: `pnpm test`
+- Conformance harness: `pnpm test:conformance`
 - Python SDK tests: `pnpm test:python-sdk`
 - Single package test: `pnpm --filter @consoler/protocol test`
 - TUI package test: `pnpm --filter @consoler/tui test`
@@ -33,6 +35,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Action replay: `pnpm agentctl -- replay <action_id>`
 - Action history: `pnpm agentctl -- history [--limit 20] [--command <name>] [--status <status>] [--json]`
 - Action trace: `pnpm agentctl -- trace <action_id> [--json]`
+- Agent conformance: `pnpm agentctl -- test <agent_id> [--command <name>] [--args <path>] [--approve-preview] [--approve] [--json]`
 - Ingest preview: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json`
 - Ingest probe: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview`
 - Ingest run: `pnpm agentctl -- run indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview --approve`
@@ -48,6 +51,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V0b TUI behavior: start in `docs/planning/v0b-minimal-tui.md`; implement runtime prepared-action APIs before UI state.
 - V1a side-effect tracer (`indbase.ingest_file`): start in `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`; keep scope to one local file.
 - V1b action history / trace: start in `docs/planning/v1b-action-history-trace-browser.md`; keep it read-only and consoler-only.
+- V1c conformance harness / `agentctl test`: start in `docs/planning/v1c-conformance-harness.md`; create `packages/conformance/` and keep default checks non-executing.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -80,6 +84,13 @@ Prefer narrow validation for the changed package before broad checks.
   4. Run focused runtime, agentctl, and TUI tests (including `packages/tui/test/history-trace-flow.test.tsx`), then `pnpm typecheck`.
   5. Default CI runs `pnpm test` and `pnpm test:python-sdk`; it does not run real `indbase` agent smokes.
 
+- Conformance harness change:
+  1. Read `docs/planning/v1c-conformance-harness.md`.
+  2. Keep `agentctl test <agent_id>` safe by default: discover/health/manifest/schema only unless `--command --args` are supplied.
+  3. Do not execute side-effecting commands unless explicit approval flags are supplied.
+  4. Use a Python SDK fake agent for CI; do not make default CI depend on `E:\indbase`.
+  5. After adding scripts, run `pnpm --filter @consoler/conformance test`, `pnpm --filter @consoler/agentctl test`, `pnpm test:conformance`, `pnpm test:python-sdk`, and `pnpm typecheck`.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -96,6 +107,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Approval binds normalized args, plan, context snapshot, side effects, and preview hash when present.
 - Execution output is a structured event stream. Do not treat logs as progress.
 - History, trace, and replay are read-only. They must not spawn agents or re-read vault/source state.
+- Conformance checks must use out-of-process agents and isolated temp runtime roots; they must not pollute the developer's `.consoler` store.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -113,6 +125,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
 - `docs/planning/v1b-action-history-trace-browser.md`: read-only action history and trace browser brief.
+- `docs/planning/v1c-conformance-harness.md`: conformance harness and `agentctl test` execution brief.
 
 ## Done Means
 
