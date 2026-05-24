@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+.vitest/
+.turbo/
+
+.consoler/*.db
+.consoler/*.db-*
+
+fixtures/sample-vault/.indbase/db.sqlite
+fixtures/sample-vault/.indbase/db.sqlite-*
+
+# Ingest smoke writes archived originals under the fixture vault
+fixtures/sample-vault/.indbase/originals/
+
+__pycache__/
+.pytest_cache/
+.venv/
+
+*.log

@@ -1,0 +1,15 @@
+{
+  "agents": [
+    {
+      "agent_id": "indbase",
+      "name": "indbase",
+      "cwd": "E:\\indbase",
+      "command": "uv",
+      "args": ["run", "python", "-m", "indbase_agent"],
+      "env": {
+        "PYTHONPATH": "E:\\consoler\\sdks\\python"
+      },
+      "enabled": true
+    }
+  ]
+}

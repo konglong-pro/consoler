@@ -1,0 +1,28 @@
+{
+  "name": "@consoler/tui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prestart": "pnpm --filter @consoler/protocol build && pnpm --filter @consoler/runtime build",
+    "start": "tsx src/main.tsx",
+    "test": "vitest run",
+    "typecheck": "pnpm --filter @consoler/runtime build && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@consoler/protocol": "workspace:*",
+    "@consoler/runtime": "workspace:*",
+    "ink": "^7.0.3",
+    "ink-select-input": "^6.2.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "ink-testing-library": "^4.0.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@consoler/agentctl",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "consoler-agentctl": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@consoler/conformance": "workspace:*",
+    "@consoler/protocol": "workspace:*",
+    "@consoler/runtime": "workspace:*",
+    "commander": "^14.0.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prestart": "pnpm --filter @consoler/protocol build && pnpm --filter @consoler/runtime build",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "consoler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.1",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
+  "scripts": {
+    "agentctl": "pnpm --filter @consoler/agentctl start",
+    "tui": "pnpm --filter @consoler/tui start",
+    "build": "pnpm -r build",
+    "test": "pnpm -r --filter \"!@consoler/conformance\" test",
+    "test:conformance": "node scripts/test-conformance.mjs",
+    "test:agentctl-smoke": "node scripts/test-agentctl-smoke.mjs",
+    "test:python-sdk": "node scripts/test-python-sdk.mjs",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

@@ -1,0 +1,56 @@
+schema_version = "indbase.config.v1"
+vault_path = "E:/consoler/fixtures/sample-vault"
+default_language = "zh"
+
+[ingest]
+recursive = true
+preserve_original = true
+max_file_size_mb = 200
+detect_duplicates = true
+tier1_extensions = ["md", "txt", "html", "csv", "json"]
+tier2_extensions = ["docx", "xlsx", "pptx", "pdf"]
+
+[ingest.swallow]
+store_dir = ".indbase/cache/swallow"
+config_path = ".indbase/config/swallow.config.yaml"
+auto_current_quality_threshold = 0.75
+review_quality_threshold = 0.45
+min_markdown_chars = 80
+archive_required_artifacts = true
+allow_partial_auto_current = false
+allow_ocr_auto_current = true
+allow_asr_auto_current = true
+allow_web_auto_current = true
+
+[output.transition]
+runtime_dir = ".indbase/runtime/transition"
+bridge_path = ".indbase/runtime/transition/transition-bridge.mjs"
+config_path = ".indbase/runtime/transition/transition.config.json"
+cache_dir = ".indbase/cache/transition"
+bridge_timeout_seconds = 300
+archive_required_artifacts = true
+protect_source_bindings = true
+
+[search]
+default_scope = "sources_current"
+top_k = 20
+persist_search_results = false
+log_queries = true
+cjk_strategy = "substring_fallback"
+
+[tui]
+mode = "lite"
+
+[features]
+transition_output = false
+swallow_ingest = false
+web_ingest = false
+login_profile_ingest = false
+external_ingest_providers = false
+ocr = false
+asr = false
+embedding = false
+ask = false
+translation = false
+candidate_cards = false
+auto_classification = false

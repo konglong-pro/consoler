@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://consoler.dev/schemas/v0/action-event.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "run_id",
+    "action_id",
+    "agent_id",
+    "command",
+    "type",
+    "seq",
+    "epoch",
+    "timestamp"
+  ],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "action_id": { "type": "string", "minLength": 1 },
+    "agent_id": { "type": "string", "minLength": 1 },
+    "command": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "enum": [
+        "action.started",
+        "step.started",
+        "step.completed",
+        "progress.updated",
+        "log",
+        "interaction.required",
+        "action.succeeded",
+        "action.failed",
+        "action.cancelled"
+      ]
+    },
+    "seq": { "type": "integer", "minimum": 1 },
+    "epoch": { "type": "integer", "const": 0 },
+    "timestamp": { "type": "string", "minLength": 1 },
+    "step_id": { "type": "string" },
+    "message": { "type": "string" },
+    "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+    "blocks": {
+      "type": "array",
+      "items": { "$ref": "https://consoler.dev/schemas/v0/renderable-block.json" }
+    },
+    "error": { "$ref": "https://consoler.dev/schemas/v0/agent-error.json" },
+    "interaction": { "$ref": "https://consoler.dev/schemas/v0/interaction-request.json" },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "type": { "const": "interaction.required" } },
+        "required": ["type"]
+      },
+      "then": { "required": ["interaction"] }
+    }
+  ]
+}

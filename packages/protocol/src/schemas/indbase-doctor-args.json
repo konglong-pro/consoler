@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["vault_path"],
+  "properties": {
+    "vault_path": {
+      "type": "string",
+      "description": "Path to an existing indbase vault."
+    },
+    "hard_only": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

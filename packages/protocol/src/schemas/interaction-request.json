@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://consoler.dev/schemas/v0/interaction-request.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["interaction_id", "title", "message"],
+  "properties": {
+    "interaction_id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 },
+    "choices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "prompt_schema": { "type": "object" },
+    "default_response": {},
+    "blocks": {
+      "type": "array",
+      "items": { "$ref": "https://consoler.dev/schemas/v0/renderable-block.json" }
+    }
+  }
+}
