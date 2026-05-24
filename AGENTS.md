@@ -56,6 +56,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V1e real indbase renderable blocks: start in `docs/planning/v1e-real-indbase-renderable-blocks.md`; wire existing diff/artifact blocks into `E:\indbase` execution results only.
 - V1f cooperative cancel: start in `docs/planning/v1f-cooperative-cancel.md`; prove SDK/runtime/agentctl cancel without TUI or strong epoch semantics.
 - V1g TUI cooperative cancel: start in `docs/planning/v1g-tui-cooperative-cancel.md`; wire V1f runtime cancel control into the Ink TUI without strong epoch or force-kill semantics.
+- V1h `interaction.required`: start in `docs/planning/v1h-interaction-required.md`; fake-first runtime/SDK/agentctl/TUI interaction loop with one pending interaction and no timeout or response persistence.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -126,6 +127,14 @@ Prefer narrow validation for the changed package before broad checks.
   5. Run focused TUI, runtime, conformance, agentctl, Python SDK, root conformance, typecheck, build, and root test checks.
   6. Harden the existing history/trace TUI flake only with minimal test timing/input changes.
 
+- Interaction-required change:
+  1. Read `docs/planning/v1h-interaction-required.md`.
+  2. Keep V1h fake-first; do not edit `E:\indbase` or add interactive prompts to `agentctl run`.
+  3. Allow one pending interaction per run; support choices plus simple object-schema input only.
+  4. Do not add timeout policy, response persistence, `interactions` table, `system.*` events, strong epoch, or force-kill changes.
+  5. Use conformance fake and `agentctl test --interaction-response <path>` for headless validation.
+  6. Run focused protocol, runtime, conformance, agentctl, TUI, Python SDK, root conformance, typecheck, build, and root test checks.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -147,6 +156,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V1e real agent artifact blocks use logical `indbase://...` references; they still do not grant consoler ownership of indbase artifact storage or file access.
 - V1f cancel is cooperative only: a cancel request is not a cancelled terminal state until the agent emits `action.cancelled`.
 - V1g TUI cancel sends only a cancel request; the TUI must wait for agent-emitted `action.cancelled` before showing a cancelled terminal state.
+- V1h interactions are live transport responses only: persist `interaction.required` as an event, but do not persist user responses unless a newer planning doc changes scope.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -169,6 +179,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1e-real-indbase-renderable-blocks.md`: real `indbase.ingest_file` diff/artifact adoption brief.
 - `docs/planning/v1f-cooperative-cancel.md`: SDK/runtime/agentctl cooperative cancel execution brief.
 - `docs/planning/v1g-tui-cooperative-cancel.md`: Ink TUI cancel integration brief.
+- `docs/planning/v1h-interaction-required.md`: fake-first running interaction loop execution brief.
 
 ## Done Means
 

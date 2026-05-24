@@ -75,3 +75,15 @@ An agent-owned point in execution where the agent checks whether cancellation ha
 ## Cancelled Terminal Event
 
 The event-stream fact that an action ended because cancellation was observed by the agent. In the current protocol this is represented by `action.cancelled` and is distinct from a cancel request.
+
+## Interaction Request
+
+A structured prompt an agent emits during execution as an `interaction.required` event with an `interaction` payload (`interaction_id`, `title`, `message`, and optional `choices`, `prompt_schema`, `default_response`, or `blocks`). It asks the runtime or UI for user input without ending the run.
+
+## Interaction Response
+
+The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1h does not persist responses as separate events or database rows; only the agent’s subsequent execution events are stored.
+
+## Pending Interaction
+
+The single in-flight interaction a run accepts at a time. The runtime tracks one pending `interaction_id` between an accepted `interaction.required` event and a successful `respondInteraction` call (or run termination).

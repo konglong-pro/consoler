@@ -92,6 +92,54 @@ describe("conformance harness", () => {
     expect(report.checks.find((row) => row.id === "execution.no_rejected")?.status).toBe("passed");
   });
 
+  it("fails fast when interactive command lacks interaction response", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.interactive_choice",
+      args: { message: "pick" },
+      approve: true
+    });
+    expect(report.passed).toBe(false);
+    expect(report.checks.find((row) => row.id === "interaction.response_required")?.status).toBe(
+      "failed"
+    );
+    expect(report.checks.find((row) => row.id === "command.execute")?.status).toBe("skipped");
+  });
+
+  it("executes interactive choice with pre-seeded response", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.interactive_choice",
+      args: { message: "pick" },
+      approve: true,
+      interactionResponse: "ok"
+    });
+    expect(report.passed).toBe(true);
+    expect(report.checks.find((row) => row.id === "interaction.required_event")?.status).toBe(
+      "passed"
+    );
+    expect(report.checks.find((row) => row.id === "interaction.terminal_state")?.status).toBe(
+      "passed"
+    );
+  });
+
+  it("executes interactive form with object-schema response", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.interactive_form",
+      args: { message: "form" },
+      approve: true,
+      interactionResponse: { name: "alice", confirm: true, count: 2 }
+    });
+    expect(report.passed).toBe(true);
+    expect(report.checks.find((row) => row.id === "interaction.response_sent")?.status).toBe(
+      "passed"
+    );
+  });
+
   it("flags invalid events in unit tests without requiring fake agent behavior", () => {
     const invalid = validateActionEvent({ type: "log" });
     expect(invalid.ok).toBe(false);

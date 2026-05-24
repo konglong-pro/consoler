@@ -8,6 +8,7 @@ from typing import Any
 from .adapter import AgentAdapter
 from .errors import AgentCancelled, AgentError, normalize_error
 from .events import CancelFlag, EventEmitter
+from .interaction import InteractionHelper
 
 
 class JsonRpcServer:
@@ -16,6 +17,7 @@ class JsonRpcServer:
         self.cancel_flag = CancelFlag()
         self._stdout_lock = threading.Lock()
         self._execute_thread: threading.Thread | None = None
+        self._interaction: InteractionHelper | None = None
 
     def run(self) -> None:
         for line in sys.stdin:
@@ -31,6 +33,11 @@ class JsonRpcServer:
             method = message.get("method")
             if method == "agent.execute":
                 self._start_execute(message)
+                continue
+            if method == "action.respond_interaction":
+                response = self._respond_interaction(message)
+                if response is not None:
+                    self._write_message(response)
                 continue
             response = self._dispatch(message)
             if response is not None:
@@ -108,6 +115,68 @@ class JsonRpcServer:
             )
         finally:
             self._execute_thread = None
+            self._interaction = None
+
+    def _respond_interaction(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        request_id = message.get("id")
+        if not self._execute_busy():
+            err = AgentError("interaction.not_running", "No agent.execute in progress")
+            if request_id is None:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32000,
+                    "message": err.message,
+                    "data": err.to_dict(),
+                },
+            }
+        if self._interaction is None:
+            err = AgentError("interaction.unavailable", "Interaction helper not ready")
+            if request_id is None:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32000,
+                    "message": err.message,
+                    "data": err.to_dict(),
+                },
+            }
+        params = message.get("params") or {}
+        interaction_id = params.get("interaction_id")
+        if not interaction_id:
+            err = AgentError("interaction.invalid", "interaction_id is required")
+            if request_id is None:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32000,
+                    "message": err.message,
+                    "data": err.to_dict(),
+                },
+            }
+        try:
+            result = self._interaction.respond(str(interaction_id), params.get("response"))
+            if request_id is None:
+                return None
+            return {"jsonrpc": "2.0", "id": request_id, "result": result}
+        except AgentError as err:
+            if request_id is None:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
+                    "code": -32000,
+                    "message": err.message,
+                    "data": err.to_dict(),
+                },
+            }
 
     def _dispatch(self, message: dict[str, Any]) -> dict[str, Any] | None:
         request_id = message.get("id")
@@ -184,6 +253,8 @@ class JsonRpcServer:
             command=command,
             publish=publish,
         )
+        interaction = InteractionHelper(emitter, cancel_flag=self.cancel_flag)
+        self._interaction = interaction
         emitter.emit("action.started", message=f"Starting {command}")
         try:
             result = self.adapter.execute(
@@ -194,6 +265,7 @@ class JsonRpcServer:
                 run_id=run_id,
                 emitter=emitter,
                 cancel_flag=self.cancel_flag,
+                interaction=interaction,
             )
             blocks = result.get("blocks", [])
             if blocks:

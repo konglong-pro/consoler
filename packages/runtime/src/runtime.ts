@@ -10,6 +10,7 @@ import {
   type ActionEvent,
   type ActionPlan,
   type AgentManifest,
+  type InteractionRequest
 } from "@consoler/protocol";
 
 import {
@@ -26,6 +27,7 @@ import {
 } from "./command-policy.js";
 import { ConsolerStore } from "./db/store.js";
 import { EventStore } from "./event-store.js";
+import { validateInteractionResponse } from "./interaction-response.js";
 import type {
   CommandArgsInput,
   ConsolerRuntimeOptions,
@@ -223,6 +225,7 @@ export class ConsolerRuntime {
     this.store.createRun(runId, prepared.action.action_id, prepared.action.agent_id, prepared.action.command);
 
     const acceptedEvents: ActionEvent[] = [];
+    let pendingInteraction: InteractionRequest | null = null;
     let settled = false;
     let resolveDone!: (value: RuntimeTerminalResult) => void;
     let rejectDone!: (error: Error) => void;
@@ -236,6 +239,7 @@ export class ConsolerRuntime {
       const hasTerminal = acceptedEvents.some((event) => TERMINAL_EVENT_TYPES.has(event.type));
       if (!hasTerminal) return;
       settled = true;
+      pendingInteraction = null;
       const state = terminalStateFromEvents(acceptedEvents);
       handlers.onStateChange?.(state);
       resolveDone({ run_id: runId, state, events: [...acceptedEvents] });
@@ -254,6 +258,9 @@ export class ConsolerRuntime {
       );
       if (ingest.accepted && ingest.event) {
         acceptedEvents.push(ingest.event);
+        if (ingest.event.type === "interaction.required" && ingest.event.interaction) {
+          pendingInteraction = ingest.event.interaction;
+        }
         handlers.onEvent?.(ingest.event, ingest);
         maybeFinish();
       } else if (ingest.event) {
@@ -287,10 +294,30 @@ export class ConsolerRuntime {
         }
       });
 
+    const respondInteraction = async (interactionId: string, response: unknown): Promise<unknown> => {
+      if (settled) {
+        throw new Error("Cannot respond: run already terminal");
+      }
+      if (!pendingInteraction) {
+        throw new Error("No pending interaction");
+      }
+      if (pendingInteraction.interaction_id !== interactionId) {
+        throw new Error(`Unknown interaction id: ${interactionId}`);
+      }
+      validateInteractionResponse(pendingInteraction, response);
+      const result = await execClient.request("action.respond_interaction", {
+        interaction_id: interactionId,
+        response
+      });
+      pendingInteraction = null;
+      return result;
+    };
+
     return {
       run_id: runId,
       done,
       cancel: () => execClient.request("agent.cancel", {}),
+      respondInteraction,
       close: () => execClient.kill()
     };
   }

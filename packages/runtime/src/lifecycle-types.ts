@@ -4,6 +4,7 @@ import type {
   ActionPlan,
   AgentManifest,
   ApprovalToken,
+  InteractionRequest,
   RegistryAgentEntry
 } from "@consoler/protocol";
 
@@ -82,6 +83,7 @@ export interface PreparedExecutionControl {
   run_id: string;
   done: Promise<RuntimeTerminalResult>;
   cancel: () => Promise<unknown>;
+  respondInteraction: (interactionId: string, response: unknown) => Promise<unknown>;
   close: () => void;
 }
 

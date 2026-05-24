@@ -15,17 +15,17 @@ import { App } from "../src/app.js";
 
 function mockPrepared(): PreparedAction {
   const snapshot = {
-    snapshot_id: "snap_cancel_tui",
+    snapshot_id: "snap_ix_tui",
     kind: "composite" as const,
     summary: "test",
     details: { vault_path: "/tmp/v" },
     created_at: new Date().toISOString()
   };
   const plan: ActionPlan = {
-    plan_id: "plan_cancel_tui",
-    action_id: "act_cancel_tui",
+    plan_id: "plan_ix_tui",
+    action_id: "act_ix_tui",
     agent_id: "indbase",
-    command: "indbase.doctor",
+    command: "conformance.interactive_choice",
     steps: [{ step_id: "s1", title: "Step" }],
     context_snapshot_id: snapshot.snapshot_id,
     context_snapshot: snapshot,
@@ -34,20 +34,20 @@ function mockPrepared(): PreparedAction {
   };
   return {
     action: {
-      action_id: "act_cancel_tui",
+      action_id: "act_ix_tui",
       agent_id: "indbase",
-      command: "indbase.doctor",
-      args: { vault_path: "/tmp/v" },
+      command: "conformance.interactive_choice",
+      args: { message: "hello" },
       created_at: new Date().toISOString()
     },
     plan,
     plan_hash: "hash",
     preview: { summary: "static" },
     approval: {
-      approval_id: "appr_cancel_tui",
-      action_id: "act_cancel_tui",
+      approval_id: "appr_ix_tui",
+      action_id: "act_ix_tui",
       agent_id: "indbase",
-      command: "indbase.doctor",
+      command: "conformance.interactive_choice",
       scope: "execute",
       args_hash: "args",
       plan_hash: "hash",
@@ -56,8 +56,8 @@ function mockPrepared(): PreparedAction {
       material: {
         agent_id: "indbase",
         agent_version: "0.1.0",
-        command: "indbase.doctor",
-        normalized_args: { vault_path: "/tmp/v" },
+        command: "conformance.interactive_choice",
+        normalized_args: { message: "hello" },
         plan_summary: "plan",
         context_summary: "ctx",
         side_effects: []
@@ -84,9 +84,9 @@ function terminalEvent(
   return {
     event_id: `evt_${type}_${seq}`,
     run_id: "run_mock",
-    action_id: "act_cancel_tui",
+    action_id: "act_ix_tui",
     agent_id: "indbase",
-    command: "indbase.doctor",
+    command: "conformance.interactive_choice",
     type,
     seq,
     epoch: 0,
@@ -95,16 +95,16 @@ function terminalEvent(
   };
 }
 
-describe("TUI cooperative cancel flow", () => {
+describe("TUI interaction.required flow", () => {
   afterEach(() => {
     cleanup();
   });
 
-  it("requests cancel during running and finishes on action.cancelled without success blocks", async () => {
+  it("renders interaction card, sends choice response, and finishes with result blocks", async () => {
     const prepared = mockPrepared();
     let resolveTerminal!: (result: RuntimeTerminalResult) => void;
     let capturedHandlers: RuntimeEventHandlers | undefined;
-    const cancelFn = vi.fn(async () => ({ ok: false, cancelled: true }));
+    const respondInteraction = vi.fn(async () => ({ ok: true }));
     const closeFn = vi.fn();
 
     const executePreparedWithControl = vi.fn(
@@ -115,8 +115,8 @@ describe("TUI cooperative cancel flow", () => {
           done: new Promise<RuntimeTerminalResult>((resolve) => {
             resolveTerminal = resolve;
           }),
-          cancel: cancelFn,
-          respondInteraction: vi.fn(),
+          cancel: vi.fn(),
+          respondInteraction,
           close: closeFn
         };
       }
@@ -136,39 +136,48 @@ describe("TUI cooperative cancel flow", () => {
 
     stdin.write("y");
 
-    await vi.waitFor(() => {
-      expect(lastFrame()).toContain("c cancel");
-      expect(executePreparedWithControl).toHaveBeenCalledTimes(1);
-    });
-
-    stdin.write("c");
-    stdin.write("c");
-
-    await vi.waitFor(() => {
-      expect(cancelFn).toHaveBeenCalledTimes(1);
-      expect(lastFrame()).toContain("Cancel requested; waiting for agent checkpoint");
-    });
-
     const started = terminalEvent("action.started", 1);
-    const cancelled = terminalEvent("action.cancelled", 2);
+    const required = terminalEvent("interaction.required", 2, {
+      interaction: {
+        interaction_id: "ix_1",
+        title: "Pick outcome",
+        message: "Select one",
+        choices: [
+          { id: "ok", label: "Success path" },
+          { id: "alt", label: "Alternate path" }
+        ]
+      }
+    });
     capturedHandlers?.onEvent?.(started, { accepted: true, event: started });
-    capturedHandlers?.onEvent?.(cancelled, { accepted: true, event: cancelled });
+    capturedHandlers?.onEvent?.(required, { accepted: true, event: required });
 
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain("Interaction required");
+      expect(lastFrame()).toContain("1. Success path");
+    });
+
+    stdin.write("1");
+
+    await vi.waitFor(() => {
+      expect(respondInteraction).toHaveBeenCalledWith("ix_1", "ok");
+    });
+
+    const succeeded = terminalEvent("action.succeeded", 3, {
+      blocks: [{ block_id: "b1", type: "markdown", content: "# Choice OK" }]
+    });
+    capturedHandlers?.onEvent?.(succeeded, { accepted: true, event: succeeded });
     resolveTerminal({
       run_id: "run_mock",
-      state: "cancelled",
-      events: [started, cancelled]
+      state: "succeeded",
+      events: [started, required, succeeded]
     });
 
     await vi.waitFor(() => {
       const frame = lastFrame() ?? "";
-      expect(frame).toContain("action.cancelled");
-      expect(frame).toContain("Execution cancelled.");
-      expect(frame).not.toContain("# ok");
-      expect(frame).not.toMatch(/markdown.*# ok/i);
+      expect(frame).toContain("action.succeeded");
+      expect(frame).toContain("# Choice OK");
     });
 
-    expect(closeFn).toHaveBeenCalled();
     unmount();
   });
 });

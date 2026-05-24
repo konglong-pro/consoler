@@ -23,6 +23,8 @@ class ConformanceFakeAdapter(AgentAdapter):
             "conformance.static_echo",
             "conformance.probe_echo",
             "conformance.slow_cancel",
+            "conformance.interactive_choice",
+            "conformance.interactive_form",
         }:
             raise AgentError("command.not_found", command)
         if not str(args.get("message", "")).strip():
@@ -62,9 +64,61 @@ class ConformanceFakeAdapter(AgentAdapter):
         run_id: str,
         emitter: EventEmitter,
         cancel_flag,
+        interaction=None,
     ) -> dict[str, Any]:
         self.validate(command, args)
         cancel_flag.check("execute")
+
+        if command == "conformance.interactive_choice":
+            if interaction is None:
+                raise AgentError("interaction.required", "interaction helper missing")
+            choice = interaction.request(
+                interaction_id=f"choice-{action_id}",
+                title="Pick outcome",
+                message=f"Select how to finish for {args['message']}",
+                choices=[
+                    {"id": "ok", "label": "Success path"},
+                    {"id": "alt", "label": "Alternate path"},
+                ],
+            )
+            if choice == "ok":
+                return {
+                    "blocks": [
+                        markdown_block("# Choice OK", title="result"),
+                        json_block({"choice": choice, "message": args["message"]}, title="payload"),
+                    ]
+                }
+            return {
+                "blocks": [
+                    markdown_block("# Alternate choice", title="result"),
+                    json_block({"choice": choice}, title="payload"),
+                ]
+            }
+
+        if command == "conformance.interactive_form":
+            if interaction is None:
+                raise AgentError("interaction.required", "interaction helper missing")
+            response = interaction.request(
+                interaction_id=f"form-{action_id}",
+                title="Confirm details",
+                message=f"Enter values for {args['message']}",
+                prompt_schema={
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["name", "confirm"],
+                    "properties": {
+                        "name": {"type": "string", "minLength": 1},
+                        "confirm": {"type": "boolean"},
+                        "count": {"type": "number"},
+                    },
+                },
+            )
+            return {
+                "blocks": [
+                    markdown_block("# Form response", title="result"),
+                    json_block(response, title="form-response"),
+                ]
+            }
 
         if command == "conformance.slow_cancel":
             iterations = int(args.get("iterations", 200))

@@ -10,6 +10,7 @@ from consoler_agent_sdk import (
     AgentError,
     CancelFlag,
     EventEmitter,
+    InteractionHelper,
     JsonRpcServer,
     StepHelper,
     artifact_block,
@@ -171,6 +172,124 @@ def test_diff_and_artifact_block_helpers():
     assert art["content"]["uri"] == "file:///tmp/out.txt"
     assert art["content"]["kind"] == "text/plain"
     assert art["content"]["metadata"]["bytes"] == 3
+
+
+def test_interaction_request_and_respond():
+    published: list[dict] = []
+    emitter = EventEmitter("run_1", "act_1", "echo", "echo.ping", published.append)
+    helper = InteractionHelper(emitter)
+
+    def requester() -> str:
+        return helper.request(
+            interaction_id="ix_1",
+            title="Choose",
+            message="Pick",
+            choices=[{"id": "a", "label": "A"}],
+        )
+
+    import threading
+
+    thread = threading.Thread(target=requester)
+    thread.start()
+
+    # wait for interaction.required
+    for _ in range(50):
+        if any(event.get("type") == "interaction.required" for event in published):
+            break
+        threading.Event().wait(0.01)
+    assert any(event.get("type") == "interaction.required" for event in published)
+
+    result = helper.respond("ix_1", "a")
+    thread.join(timeout=2)
+    assert result == {"ok": True}
+    assert thread.is_alive() is False
+
+
+def test_interaction_stale_response_rejected():
+    published: list[dict] = []
+    emitter = EventEmitter("run_1", "act_1", "echo", "echo.ping", published.append)
+    helper = InteractionHelper(emitter)
+    helper._pending_id = "ix_expected"
+    with pytest.raises(AgentError, match="Unknown interaction id"):
+        helper.respond("ix_other", "a")
+
+
+def test_jsonrpc_respond_interaction_while_execute():
+    class InteractiveAdapter(AgentAdapter):
+        def manifest_path(self) -> Path:
+            return Path(__file__).parent / "manifest.json"
+
+        def load_manifest(self) -> dict:
+            return {
+                "agent_id": "ix",
+                "name": "ix",
+                "version": "0.0.1",
+                "protocol_version": "0",
+                "commands": [],
+            }
+
+        def validate(self, command: str, args: dict) -> None:
+            return None
+
+        def plan(self, command: str, args: dict, action_id: str) -> dict:
+            return {"steps": [], "side_effects": []}
+
+        def preview(self, command: str, args: dict, plan: dict | None = None) -> dict:
+            return {"summary": "static"}
+
+        def execute(self, command: str, args: dict, plan: dict, **kwargs) -> dict:
+            interaction = kwargs["interaction"]
+            choice = interaction.request(
+                interaction_id="ix_run",
+                title="Pick",
+                message="Choose",
+                choices=[{"id": "ok", "label": "OK"}],
+            )
+            return {"blocks": [], "choice": choice}
+
+    server = JsonRpcServer(InteractiveAdapter())
+    responses: list[dict] = []
+
+    def capture(message: dict) -> None:
+        responses.append(message)
+
+    server._write_message = capture  # type: ignore[method-assign]
+
+    import threading
+
+    server._start_execute(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "agent.execute",
+            "params": {
+                "run_id": "run_1",
+                "action_id": "act_1",
+                "command": "test.interactive",
+                "args": {},
+                "plan": {"steps": []},
+            },
+        }
+    )
+
+    for _ in range(100):
+        if any(m.get("method") == "agent.event" for m in responses):
+            break
+        threading.Event().wait(0.01)
+
+    rpc_response = server._respond_interaction(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "action.respond_interaction",
+            "params": {"interaction_id": "ix_run", "response": "ok"},
+        }
+    )
+    assert rpc_response is not None
+    assert rpc_response.get("result") == {"ok": True}
+    if server._execute_thread is not None:
+        server._execute_thread.join(timeout=2)
+    assert server._execute_busy() is False
 
 
 def test_jsonrpc_discover_dispatch(monkeypatch):

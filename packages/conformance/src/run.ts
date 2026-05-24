@@ -28,6 +28,11 @@ import {
 } from "./isolated-root.js";
 import type { ConformanceCheck, ConformanceReport, RunAgentConformanceInput } from "./types.js";
 
+const INTERACTIVE_COMMANDS = new Set([
+  "conformance.interactive_choice",
+  "conformance.interactive_form"
+]);
+
 function check(
   id: string,
   name: string,
@@ -203,7 +208,12 @@ async function runCommandChecks(
   manifest: AgentManifest,
   command: string,
   args: Record<string, unknown>,
-  options: { approvePreview?: boolean; approve?: boolean; cancelAfterMs?: number }
+  options: {
+    approvePreview?: boolean;
+    approve?: boolean;
+    cancelAfterMs?: number;
+    interactionResponse?: unknown;
+  }
 ): Promise<ConformanceCheck[]> {
   const checks: ConformanceCheck[] = [];
   const commandDef = getCommandDef(manifest, command);
@@ -312,6 +322,27 @@ async function runCommandChecks(
     return checks;
   }
 
+  if (INTERACTIVE_COMMANDS.has(command)) {
+    if (options.interactionResponse === undefined) {
+      checks.push(
+        check(
+          "interaction.response_required",
+          "Interaction response",
+          "failed",
+          "Pass --interaction-response <path> for interactive conformance commands"
+        )
+      );
+      checks.push(
+        check("command.execute", "Execute", "skipped", "Missing interaction response")
+      );
+      return checks;
+    }
+    return [
+      ...checks,
+      ...(await runInteractiveExecuteChecks(runtime, prepared, options.interactionResponse))
+    ];
+  }
+
   if (options.cancelAfterMs !== undefined) {
     return [...checks, ...(await runCancelExecuteChecks(runtime, prepared, options.cancelAfterMs))];
   }
@@ -323,6 +354,90 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+async function runInteractiveExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>,
+  interactionResponse: unknown
+): Promise<ConformanceCheck[]> {
+  const checks: ConformanceCheck[] = [];
+  const accepted: ActionEvent[] = [];
+  let responded = false;
+  let control!: PreparedExecutionControl;
+
+  try {
+    control = runtime.executePreparedWithControl(prepared, {
+      onEvent: (event: ActionEvent, ingest: { accepted: boolean }) => {
+        if (ingest.accepted) {
+          accepted.push(event);
+        }
+        if (
+          ingest.accepted &&
+          event.type === "interaction.required" &&
+          event.interaction &&
+          !responded
+        ) {
+          responded = true;
+          void control
+            .respondInteraction(event.interaction.interaction_id, interactionResponse)
+            .catch(() => {
+              /* surfaced via execute failure */
+            });
+        }
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    return checks;
+  }
+
+  let terminal: Awaited<ReturnType<ConsolerRuntime["executePrepared"]>>;
+  try {
+    terminal = await control.done;
+    checks.push(
+      check("command.execute", "Execute", "passed", `terminal=${terminal.state}`)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    control.close();
+    return checks;
+  } finally {
+    control.close();
+  }
+
+  const hasInteraction = accepted.some((event) => event.type === "interaction.required");
+  checks.push(
+    check(
+      "interaction.required_event",
+      "interaction.required event",
+      hasInteraction ? "passed" : "failed",
+      hasInteraction ? "interaction.required present" : "Missing interaction.required"
+    )
+  );
+
+  checks.push(
+    check(
+      "interaction.response_sent",
+      "Interaction response routed",
+      responded ? "passed" : "failed",
+      responded ? "respondInteraction called" : "No interaction.required accepted"
+    )
+  );
+
+  const succeeded = terminal.state === "succeeded";
+  checks.push(
+    check(
+      "interaction.terminal_state",
+      "Succeeded terminal state",
+      succeeded ? "passed" : "failed",
+      `terminal=${terminal.state}`
+    )
+  );
+
+  return checks;
 }
 
 async function runCancelExecuteChecks(
@@ -669,6 +784,25 @@ export async function runAgentConformance(
               "--cancel-after-ms requires --approve"
             )
           );
+        } else if (
+          input.command &&
+          INTERACTIVE_COMMANDS.has(input.command) &&
+          input.interactionResponse === undefined &&
+          input.approve
+        ) {
+          const commandChecks = await runCommandChecks(
+            rootDir,
+            runtime,
+            input.agentId,
+            base.manifest,
+            input.command,
+            input.args,
+            {
+              ...(input.approvePreview ? { approvePreview: true } : {}),
+              approve: true
+            }
+          );
+          checks.push(...commandChecks);
         } else {
           const commandChecks = await runCommandChecks(
             rootDir,
@@ -680,7 +814,10 @@ export async function runAgentConformance(
             {
               ...(input.approvePreview ? { approvePreview: true } : {}),
               ...(input.approve ? { approve: true } : {}),
-              ...(input.cancelAfterMs !== undefined ? { cancelAfterMs: input.cancelAfterMs } : {})
+              ...(input.cancelAfterMs !== undefined ? { cancelAfterMs: input.cancelAfterMs } : {}),
+              ...(input.interactionResponse !== undefined
+                ? { interactionResponse: input.interactionResponse }
+                : {})
             }
           );
           checks.push(...commandChecks);

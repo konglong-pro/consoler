@@ -133,6 +133,39 @@ describe("action event validation", () => {
     });
     expect(result.ok).toBe(false);
   });
+
+  it("requires interaction payload for interaction.required", () => {
+    const without = validateActionEvent({
+      ...baseEvent,
+      type: "interaction.required"
+    });
+    expect(without.ok).toBe(false);
+
+    const withPayload = validateActionEvent({
+      ...baseEvent,
+      type: "interaction.required",
+      interaction: {
+        interaction_id: "ix_1",
+        title: "Choose",
+        message: "Pick one",
+        choices: [{ id: "a", label: "A" }]
+      }
+    });
+    expect(withPayload.ok).toBe(true);
+  });
+
+  it("rejects malformed interaction.required without choices or schema", () => {
+    const result = validateActionEvent({
+      ...baseEvent,
+      type: "interaction.required",
+      interaction: {
+        interaction_id: "ix_1",
+        title: "Choose",
+        message: "Pick one"
+      }
+    });
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("renderable block validation", () => {

@@ -24,9 +24,25 @@ export type ActionEventType =
   | "step.completed"
   | "progress.updated"
   | "log"
+  | "interaction.required"
   | "action.succeeded"
   | "action.failed"
   | "action.cancelled";
+
+export interface InteractionChoice {
+  id: string;
+  label: string;
+}
+
+export interface InteractionRequest {
+  interaction_id: string;
+  title: string;
+  message: string;
+  choices?: InteractionChoice[];
+  prompt_schema?: Record<string, unknown>;
+  default_response?: unknown;
+  blocks?: RenderableBlock[];
+}
 
 export const TERMINAL_EVENT_TYPES: ReadonlySet<ActionEventType> = new Set([
   "action.succeeded",
@@ -153,6 +169,7 @@ export interface ActionEvent {
   progress?: number;
   blocks?: RenderableBlock[];
   error?: AgentError;
+  interaction?: InteractionRequest;
   payload?: Record<string, unknown>;
 }
 

@@ -11,12 +11,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/app.js";
 import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 
+const WAIT_OPTS = { timeout: 10_000, interval: 50 } as const;
+
+async function flushStdin(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
+
 describe("TUI history and trace flow", () => {
   let tmpRoot: string;
   let runtime: ConsolerRuntime;
 
   beforeEach(() => {
-    tmpRoot = path.join(os.tmpdir(), `consoler-tui-v1b-${Date.now()}`);
+    tmpRoot = path.join(
+      os.tmpdir(),
+      `consoler-tui-v1b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
     mkdirSync(path.join(tmpRoot, ".consoler"), { recursive: true });
     runtime = new ConsolerRuntime({ rootDir: tmpRoot });
     seedHistoryFixture(runtime);
@@ -28,7 +37,7 @@ describe("TUI history and trace flow", () => {
     cleanup();
   });
 
-  it("navigates Home -> History -> Trace with rejected events", async () => {
+  it("opens History from the home menu", async () => {
     const { lastFrame, stdin, unmount } = render(
       <App runtime={runtime} initialManifest={indbaseManifestFixture} />
     );
@@ -39,12 +48,11 @@ describe("TUI history and trace flow", () => {
         expect(frame).toContain("New Action");
         expect(frame).toContain("History");
       },
-      { timeout: 5000 }
+      WAIT_OPTS
     );
 
-    // ink-select-input: number keys select directly (2 = History)
     stdin.write("2");
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await flushStdin();
 
     await vi.waitFor(
       () => {
@@ -52,11 +60,28 @@ describe("TUI history and trace flow", () => {
         expect(frame).toContain("indbase.doctor");
         expect(frame).toContain("History (Enter open trace");
       },
-      { timeout: 5000 }
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("navigates History -> Trace with rejected events", async () => {
+    const { lastFrame, stdin, unmount } = render(
+      <App runtime={runtime} initialManifest={indbaseManifestFixture} testHistoryView />
+    );
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("indbase.doctor");
+        expect(frame).toContain("History (Enter open trace");
+      },
+      WAIT_OPTS
     );
 
     stdin.write("1");
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    await flushStdin();
 
     await vi.waitFor(
       () => {
@@ -67,7 +92,7 @@ describe("TUI history and trace flow", () => {
         expect(frame).toContain("duplicate_seq");
         expect(frame).toContain("# history trace smoke");
       },
-      { timeout: 5000 }
+      WAIT_OPTS
     );
 
     unmount();
@@ -83,14 +108,17 @@ describe("TUI history and trace flow", () => {
       />
     );
 
-    await vi.waitFor(() => {
-      const frame = lastFrame() ?? "";
-      expect(frame).toContain('"action_id"');
-      expect(frame).toContain(HISTORY_ACTION_ID);
-      expect(frame).toContain("rejected_events");
-      expect(frame).toContain("duplicate_seq");
-      expect(frame).toContain("active: json");
-    });
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain('"action_id"');
+        expect(frame).toContain(HISTORY_ACTION_ID);
+        expect(frame).toContain("rejected_events");
+        expect(frame).toContain("duplicate_seq");
+        expect(frame).toContain("active: json");
+      },
+      WAIT_OPTS
+    );
 
     unmount();
   });

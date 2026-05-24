@@ -9,6 +9,9 @@ export default defineConfig({
     }
   },
   test: {
-    environment: "node"
+    environment: "node",
+    // Ink render + SelectInput navigation can exceed 5s when the full suite is loaded.
+    testTimeout: 20_000,
+    fileParallelism: false
   }
 });

@@ -108,6 +108,10 @@ program
     "--cancel-after-ms <n>",
     "Request cooperative cancel after N ms (requires --command --args --approve)"
   )
+  .option(
+    "--interaction-response <path>",
+    "JSON file with pre-seeded interaction response (interactive conformance commands)"
+  )
   .option("--json", "Emit structured conformance report", false)
   .description("Run agent protocol conformance checks (non-executing by default)")
   .action(
@@ -119,6 +123,7 @@ program
         approvePreview?: boolean;
         approve?: boolean;
         cancelAfterMs?: string;
+        interactionResponse?: string;
         json?: boolean;
       }
     ) => {
@@ -164,6 +169,11 @@ program
       const cancelAfterMs =
         options.cancelAfterMs !== undefined ? Number(options.cancelAfterMs) : undefined;
 
+      let interactionResponse: unknown | undefined;
+      if (options.interactionResponse) {
+        interactionResponse = loadArgs(options.interactionResponse);
+      }
+
       const report = await runAgentConformance({
         agentId,
         registryRoot: findConsolerRoot(process.cwd()),
@@ -172,6 +182,7 @@ program
         approvePreview: Boolean(options.approvePreview),
         approve: Boolean(options.approve),
         ...(cancelAfterMs !== undefined ? { cancelAfterMs } : {}),
+        ...(interactionResponse !== undefined ? { interactionResponse } : {}),
         cleanupTempRoot: true
       });
 

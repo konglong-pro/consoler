@@ -28,6 +28,7 @@
         "step.completed",
         "progress.updated",
         "log",
+        "interaction.required",
         "action.succeeded",
         "action.failed",
         "action.cancelled"
@@ -44,6 +45,16 @@
       "items": { "$ref": "https://consoler.dev/schemas/v0/renderable-block.json" }
     },
     "error": { "$ref": "https://consoler.dev/schemas/v0/agent-error.json" },
+    "interaction": { "$ref": "https://consoler.dev/schemas/v0/interaction-request.json" },
     "payload": { "type": "object" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "type": { "const": "interaction.required" } },
+        "required": ["type"]
+      },
+      "then": { "required": ["interaction"] }
+    }
+  ]
 }

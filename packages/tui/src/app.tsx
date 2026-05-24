@@ -4,7 +4,13 @@ import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ActionEvent, ActionPlan, AgentManifest, RenderableBlock } from "@consoler/protocol";
+import type {
+  ActionEvent,
+  ActionPlan,
+  AgentManifest,
+  InteractionRequest,
+  RenderableBlock
+} from "@consoler/protocol";
 import type { AgentCommand, ApprovalToken } from "@consoler/protocol";
 import type { ActionHistoryEntry, ActionTrace } from "@consoler/runtime";
 import {
@@ -29,6 +35,9 @@ import { stepFieldIndex } from "./form-nav.js";
 import {
   defaultFormValues,
   fieldsFromCommand,
+  fieldsFromObjectSchema,
+  validateFormValues,
+  valuesForInteractionSubmit,
   type FormField
 } from "./schema-form.js";
 
@@ -60,6 +69,8 @@ export interface AppProps {
   testTraceView?: { trace: ActionTrace; tab?: TabId };
   /** Test-only: open directly on execution approval */
   testPrepared?: PreparedAction;
+  /** Test-only: open directly on history list (requires injected runtime + seeded store) */
+  testHistoryView?: boolean;
 }
 
 export function App({
@@ -67,7 +78,8 @@ export function App({
   runtime: runtimeProp,
   initialManifest,
   testTraceView,
-  testPrepared
+  testPrepared,
+  testHistoryView
 }: AppProps) {
   const { exit } = useApp();
   const runtime = useMemo(() => runtimeProp ?? new ConsolerRuntime(), [runtimeProp]);
@@ -93,6 +105,11 @@ export function App({
   const [executionOutcome, setExecutionOutcome] = useState<RuntimeTerminalResult["state"] | null>(
     null
   );
+  const [pendingInteraction, setPendingInteraction] = useState<InteractionRequest | null>(null);
+  const [interactionBusy, setInteractionBusy] = useState(false);
+  const [interactionFields, setInteractionFields] = useState<FormField[]>([]);
+  const [interactionValues, setInteractionValues] = useState<Record<string, unknown>>({});
+  const [interactionFocusedField, setInteractionFocusedField] = useState(0);
   const [focusedField, setFocusedField] = useState(0);
   const formValuesRef = useRef<Record<string, unknown>>({});
   const submitFlushRef = useRef(false);
@@ -104,11 +121,20 @@ export function App({
     executionControlRef.current = null;
   }, []);
 
+  const clearPendingInteraction = useCallback(() => {
+    setPendingInteraction(null);
+    setInteractionBusy(false);
+    setInteractionFields([]);
+    setInteractionValues({});
+    setInteractionFocusedField(0);
+  }, []);
+
   const resetExecutionSession = useCallback(() => {
     cancelRequestedRef.current = false;
     setCancelRequested(false);
     setExecutionOutcome(null);
-  }, []);
+    clearPendingInteraction();
+  }, [clearPendingInteraction]);
 
   const logEvents = useMemo(() => events.filter((e) => e.type === "log"), [events]);
 
@@ -137,13 +163,19 @@ export function App({
       setPhase("prepared");
       return;
     }
+    if (testHistoryView) {
+      if (initialManifest) setManifest(initialManifest);
+      setHistoryEntries(runtime.listActionHistory({ limit: 20 }));
+      setPhase("history");
+      return;
+    }
     if (initialManifest) {
       setManifest(initialManifest);
       setPhase("home");
       return;
     }
     void bootstrap();
-  }, [replayActionId, initialManifest, testPrepared, testTraceView, resetExecutionSession]);
+  }, [replayActionId, initialManifest, testPrepared, testHistoryView, testTraceView, resetExecutionSession]);
 
   useEffect(() => {
     return () => {
@@ -314,6 +346,30 @@ export function App({
     const handlers: RuntimeEventHandlers = {
       onEvent: (event: ActionEvent) => {
         setEvents((prev) => [...prev, event]);
+        if (event.type === "interaction.required" && event.interaction) {
+          setPendingInteraction(event.interaction);
+          if (event.interaction.prompt_schema) {
+            const interactionFormFields = fieldsFromObjectSchema(event.interaction.prompt_schema);
+            setInteractionFields(interactionFormFields);
+            const defaults = defaultFormValues(interactionFormFields);
+            if (
+              event.interaction.default_response &&
+              typeof event.interaction.default_response === "object" &&
+              !Array.isArray(event.interaction.default_response)
+            ) {
+              setInteractionValues({
+                ...defaults,
+                ...(event.interaction.default_response as Record<string, unknown>)
+              });
+            } else {
+              setInteractionValues(defaults);
+            }
+            setInteractionFocusedField(0);
+          } else {
+            setInteractionFields([]);
+            setInteractionValues({});
+          }
+        }
       }
     };
     const control = runtime.executePreparedWithControl(prepared, handlers);
@@ -327,14 +383,51 @@ export function App({
         setBlocks([]);
       }
       setPhase("finished");
+      clearPendingInteraction();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("prepared");
+      clearPendingInteraction();
     } finally {
       closeExecutionControl();
       setBusy(false);
     }
   };
+
+  const submitInteractionResponse = useCallback(
+    async (response: unknown) => {
+      const control = executionControlRef.current;
+      if (!pendingInteraction || !control || interactionBusy) return;
+      setInteractionBusy(true);
+      setError(null);
+      try {
+        await control.respondInteraction(pendingInteraction.interaction_id, response);
+        clearPendingInteraction();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setInteractionBusy(false);
+      }
+    },
+    [clearPendingInteraction, interactionBusy, pendingInteraction]
+  );
+
+  const submitInteractionForm = useCallback(() => {
+    if (!pendingInteraction?.prompt_schema || interactionFields.length === 0) return;
+    const validationError = validateFormValues(interactionFields, interactionValues);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    void submitInteractionResponse(
+      valuesForInteractionSubmit(interactionValues, interactionFields)
+    );
+  }, [
+    interactionFields,
+    interactionValues,
+    pendingInteraction,
+    submitInteractionResponse
+  ]);
 
   const requestRuntimeCancel = () => {
     const control = executionControlRef.current;
@@ -363,7 +456,44 @@ export function App({
       exit();
       return;
     }
-    if (phase === "form" && fields.length > 0) {
+    if (
+      phase === "running" &&
+      pendingInteraction?.choices?.length &&
+      !interactionBusy &&
+      !cancelRequestedRef.current
+    ) {
+      const index = Number.parseInt(input, 10);
+      if (index >= 1 && index <= pendingInteraction.choices.length) {
+        void submitInteractionResponse(pendingInteraction.choices[index - 1]!.id);
+        return;
+      }
+    }
+    if (phase === "running" && pendingInteraction?.prompt_schema && interactionFields.length > 0) {
+      if (key.upArrow) {
+        setInteractionFocusedField((current) =>
+          stepFieldIndex(current, -1, interactionFields.length)
+        );
+        return;
+      }
+      if (key.downArrow) {
+        setInteractionFocusedField((current) =>
+          stepFieldIndex(current, 1, interactionFields.length)
+        );
+        return;
+      }
+      if (key.tab) {
+        const delta = key.shift ? -1 : 1;
+        setInteractionFocusedField((current) =>
+          stepFieldIndex(current, delta, interactionFields.length)
+        );
+        return;
+      }
+      if (key.return && !interactionBusy) {
+        submitInteractionForm();
+        return;
+      }
+    }
+    if (phase === "form" && fields.length > 0 && !pendingInteraction) {
       if (key.upArrow) {
         setFocusedField((current) => stepFieldIndex(current, -1, fields.length));
         return;
@@ -605,6 +735,46 @@ export function App({
           </Box>
         ) : null}
 
+        {phase === "running" && pendingInteraction ? (
+          <Box flexDirection="column" marginTop={1} borderStyle="round" padding={1}>
+            <Text bold color="magenta">
+              Interaction required
+            </Text>
+            <Text>{pendingInteraction.title}</Text>
+            <Text dimColor>{pendingInteraction.message}</Text>
+            {pendingInteraction.blocks?.map((block, index) => (
+              <RenderableBlockView key={`ix-block-${index}`} block={block} />
+            ))}
+            {pendingInteraction.choices?.length ? (
+              <Box flexDirection="column" marginTop={1}>
+                {pendingInteraction.choices.map((choice, index) => (
+                  <Text key={choice.id}>
+                    {index + 1}. {choice.label} ({choice.id})
+                  </Text>
+                ))}
+              </Box>
+            ) : null}
+            {pendingInteraction.prompt_schema && interactionFields.length > 0 ? (
+              <Box flexDirection="column" marginTop={1}>
+                {interactionFields.map((field, index) => (
+                  <FormFieldRow
+                    key={`ix-${field.name}`}
+                    field={field}
+                    value={interactionValues[field.name]}
+                    active={index === interactionFocusedField && !interactionBusy}
+                    onChange={(value) =>
+                      setInteractionValues((prev) => ({ ...prev, [field.name]: value }))
+                    }
+                  />
+                ))}
+              </Box>
+            ) : null}
+            {interactionBusy ? (
+              <Text color="yellow">Sending interaction response…</Text>
+            ) : null}
+          </Box>
+        ) : null}
+
         {phase === "finished" && executionOutcome === "cancelled" ? (
           <Box marginTop={1}>
             <Text color="yellow">Execution cancelled.</Text>
@@ -680,9 +850,17 @@ export function App({
                 : phase === "form"
                   ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
                   : phase === "running"
-                    ? cancelRequested
-                      ? "Cancel requested; waiting for agent checkpoint"
-                      : "c cancel"
+                    ? pendingInteraction?.choices?.length
+                      ? interactionBusy
+                        ? "Sending interaction response…"
+                        : "1-n choose | c cancel"
+                      : pendingInteraction?.prompt_schema
+                        ? interactionBusy
+                          ? "Sending interaction response…"
+                          : "Tab/↑↓ field | Enter submit | c cancel"
+                        : cancelRequested
+                          ? "Cancel requested; waiting for agent checkpoint"
+                          : "c cancel"
                     : phase === "prepared" || phase === "preview_approval"
                       ? "y/n approve"
                       : "Tab bottom panels"}{" "}
@@ -707,6 +885,31 @@ function FormFieldRow({
   onSubmitValue?: (value: string) => void;
 }) {
   const label = `${field.name}${field.required ? " *" : ""}${field.description ? ` — ${field.description}` : ""}`;
+
+  if (field.kind === "number") {
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        {active ? <Text color="cyan">{label}</Text> : <Text>{label}</Text>}
+        {active ? (
+          <TextInput
+            value={String(value ?? "")}
+            focus
+            onChange={(v) => {
+              const parsed = Number(v);
+              onChange(Number.isNaN(parsed) ? v : parsed);
+            }}
+            onSubmit={(v) => {
+              const parsed = Number(v);
+              onChange(Number.isNaN(parsed) ? v : parsed);
+              onSubmitValue?.(v);
+            }}
+          />
+        ) : (
+          <Text dimColor>{String(value ?? "")}</Text>
+        )}
+      </Box>
+    );
+  }
 
   if (field.kind === "boolean") {
     const items = [
