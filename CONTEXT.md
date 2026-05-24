@@ -49,3 +49,13 @@ An approval token with `scope: execute` that binds normalized args, plan hash, c
 ## Context Drift
 
 When source file metadata or vault marker/config/db state changes after execution approval was minted, the runtime rejects execution with `context_changed` and requires re-preview and re-approval.
+
+## Diff Block
+
+A `RenderableBlock` with `type: "diff"` whose `content` carries a unified diff string (`unified_diff`) plus optional `language`, `from_label`, and `to_label`. Agents emit diff blocks to describe file or text changes; consoler renderers show the diff text only and do not apply patches or read paths from the diff.
+
+## Artifact Block
+
+A `RenderableBlock` with `type: "artifact"` whose `content` references produced output by `uri` and `kind`, with optional `label` and `metadata`. In V1d, artifact blocks are event-carried references only: TUI, trace, and replay may display metadata but must not open or resolve the `uri` unless a future planning doc adds artifact storage and fetch.
+
+For `indbase.ingest_file`, artifact blocks use logical `indbase://ingest_runs/...`, `indbase://documents/...`, and `indbase://document_revisions/...` URIs. These are consoler renderable references to indbase entities, not indbase internal durable evidence artifacts and not filesystem paths.

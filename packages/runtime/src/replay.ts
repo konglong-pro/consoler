@@ -1,6 +1,7 @@
 import type { ActionEvent } from "@consoler/protocol";
 
 import type { ConsolerStore } from "./db/store.js";
+import { summarizeRenderableBlock } from "./format-block.js";
 
 export interface ReplayTimeline {
   action_id: string;
@@ -32,7 +33,7 @@ export function formatReplayTimeline(timeline: ReplayTimeline): string {
     lines.push(`  [${event.seq}] ${event.type}${event.message ? `: ${event.message}` : ""}`);
     if (event.blocks?.length) {
       for (const block of event.blocks) {
-        lines.push(`    block ${block.type} (${block.block_id})`);
+        lines.push(`    ${summarizeRenderableBlock(block)}`);
       }
     }
   }

@@ -2,7 +2,21 @@ export type PreviewKind = "static" | "dynamic" | "probe_readonly";
 
 export type ApprovalScope = "preview" | "execute";
 
-export type RenderableBlockType = "markdown" | "table" | "json" | "error";
+export type RenderableBlockType = "markdown" | "table" | "json" | "error" | "diff" | "artifact";
+
+export interface DiffBlockContent {
+  unified_diff: string;
+  language?: string;
+  from_label?: string;
+  to_label?: string;
+}
+
+export interface ArtifactBlockContent {
+  uri: string;
+  kind: string;
+  label?: string;
+  metadata?: Record<string, unknown>;
+}
 
 export type ActionEventType =
   | "action.started"

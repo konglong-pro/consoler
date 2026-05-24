@@ -8,7 +8,8 @@ import {
   manifestHasDuplicateCommands,
   validateActionEvent,
   validateCommandArgs,
-  validateManifest
+  validateManifest,
+  validateRenderableBlock
 } from "../src/index.js";
 
 describe("manifest validation", () => {
@@ -129,6 +130,60 @@ describe("action event validation", () => {
       ...baseEvent,
       type: "action.succeeded",
       blocks: [{ block_id: "b1", type: "chart", content: {} }]
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("renderable block validation", () => {
+  it("accepts valid diff and artifact blocks", () => {
+    expect(
+      validateRenderableBlock({
+        block_id: "b-diff",
+        type: "diff",
+        content: { unified_diff: "--- a\n+++ b\n" }
+      }).ok
+    ).toBe(true);
+    expect(
+      validateRenderableBlock({
+        block_id: "b-art",
+        type: "artifact",
+        content: { uri: "file:///tmp/x.txt", kind: "text/plain" }
+      }).ok
+    ).toBe(true);
+  });
+
+  it("rejects diff without unified_diff", () => {
+    const result = validateRenderableBlock({
+      block_id: "b-diff",
+      type: "diff",
+      content: {}
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects artifact without uri or kind", () => {
+    expect(
+      validateRenderableBlock({
+        block_id: "b-art",
+        type: "artifact",
+        content: { kind: "text/plain" }
+      }).ok
+    ).toBe(false);
+    expect(
+      validateRenderableBlock({
+        block_id: "b-art",
+        type: "artifact",
+        content: { uri: "file:///tmp/x.txt" }
+      }).ok
+    ).toBe(false);
+  });
+
+  it("rejects unsupported block types", () => {
+    const result = validateRenderableBlock({
+      block_id: "b1",
+      type: "chart",
+      content: {}
     });
     expect(result.ok).toBe(false);
   });

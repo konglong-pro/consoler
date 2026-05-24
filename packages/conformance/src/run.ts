@@ -3,17 +3,20 @@ import {
   validateActionEvent,
   validateCommandArgs,
   validateManifest,
+  validateRenderableBlock,
   type ActionEvent,
   type AgentManifest
 } from "@consoler/protocol";
 
 import {
   ConsolerRuntime,
+  formatReplayTimeline,
   getCommandDef,
   getEnabledAgent,
   isProbeReadonlyPreview,
   JsonRpcAgentClient,
-  loadRegistry
+  loadRegistry,
+  replayAction
 } from "@consoler/runtime";
 
 import {
@@ -423,6 +426,52 @@ async function runExecuteChecks(
       )
     );
   }
+
+  for (const block of trace.result_blocks) {
+    const validated = validateRenderableBlock(block);
+    if (!validated.ok) {
+      checks.push(
+        check(
+          "execution.result_blocks",
+          "Result block schema",
+          "failed",
+          `Invalid ${block.type} block ${block.block_id}`
+        )
+      );
+      return checks;
+    }
+  }
+  checks.push(
+    check(
+      "execution.result_blocks",
+      "Result block schema",
+      "passed",
+      `${trace.result_blocks.length} block(s) valid`
+    )
+  );
+
+  const hasDiff = trace.result_blocks.some((block) => block.type === "diff");
+  const hasArtifact = trace.result_blocks.some((block) => block.type === "artifact");
+  checks.push(
+    check(
+      "execution.diff_artifact_blocks",
+      "Diff and artifact blocks",
+      hasDiff && hasArtifact ? "passed" : "failed",
+      `types=${trace.result_blocks.map((block) => block.type).join(",") || "none"}`
+    )
+  );
+
+  const replayText = formatReplayTimeline(replayAction(runtime.store, actionId));
+  const replaySummaries =
+    replayText.includes("diff (") && replayText.includes("artifact (");
+  checks.push(
+    check(
+      "execution.replay_block_summaries",
+      "Replay block summaries",
+      replaySummaries ? "passed" : "failed",
+      replaySummaries ? "diff/artifact summaries present" : "missing summaries in replay text"
+    )
+  );
 
   return checks;
 }

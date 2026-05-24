@@ -46,6 +46,23 @@ describe("conformance harness", () => {
     expect(report.passed).toBe(true);
   });
 
+  it("executes static command with diff and artifact blocks in trace and replay", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.static_echo",
+      args: { message: "blocks" },
+      approve: true
+    });
+    expect(report.passed).toBe(true);
+    expect(report.checks.find((row) => row.id === "execution.diff_artifact_blocks")?.status).toBe(
+      "passed"
+    );
+    expect(
+      report.checks.find((row) => row.id === "execution.replay_block_summaries")?.status
+    ).toBe("passed");
+  });
+
   it("executes probe command with dual approval and verifies replay", async () => {
     const report = await runAgentConformance({
       agentId: FAKE_AGENT_ID,

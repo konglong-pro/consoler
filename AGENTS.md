@@ -52,6 +52,8 @@ Prefer narrow validation for the changed package before broad checks.
 - V1a side-effect tracer (`indbase.ingest_file`): start in `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`; keep scope to one local file.
 - V1b action history / trace: start in `docs/planning/v1b-action-history-trace-browser.md`; keep it read-only and consoler-only.
 - V1c conformance harness / `agentctl test`: start in `docs/planning/v1c-conformance-harness.md`; create `packages/conformance/` and keep default checks non-executing.
+- V1d diff/artifact renderable blocks: start in `docs/planning/v1d-diff-artifact-renderable-blocks.md`; extend protocol/renderers without adding artifact storage.
+- V1e real indbase renderable blocks: start in `docs/planning/v1e-real-indbase-renderable-blocks.md`; wire existing diff/artifact blocks into `E:\indbase` execution results only.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -91,6 +93,21 @@ Prefer narrow validation for the changed package before broad checks.
   4. Use a Python SDK fake agent for CI; do not make default CI depend on `E:\indbase`.
   5. After adding scripts, run `pnpm --filter @consoler/conformance test`, `pnpm --filter @consoler/agentctl test`, `pnpm test:conformance`, `pnpm test:python-sdk`, and `pnpm typecheck`.
 
+- Renderable block change:
+  1. Read `docs/planning/v1d-diff-artifact-renderable-blocks.md`.
+  2. Keep the block envelope `{ block_id, type, title?, content }`; do not add custom renderer code from agents.
+  3. Do not add artifact storage or read artifact `uri` values in TUI, trace, or replay.
+  4. Update protocol schema/tests, Python SDK helpers, TUI renderer, runtime formatters, and conformance fake coverage together.
+  5. Run focused protocol, TUI, conformance, agentctl, Python SDK, and root conformance checks before broad build/typecheck/test.
+
+- Real indbase renderable adoption:
+  1. Read `docs/planning/v1e-real-indbase-renderable-blocks.md`.
+  2. Keep changes execution-only for `indbase.ingest_file`; do not change preview report shape or approval semantics.
+  3. Use logical `indbase://...` artifact URIs, not `file://` or absolute paths.
+  4. Run `uv run pytest tests/test_indbase_agent.py` from `E:\indbase`.
+  5. Run focused consoler protocol/TUI/conformance/agentctl/Python SDK checks, then `pnpm typecheck`.
+  6. Smoke with `agentctl test indbase --command indbase.ingest_file` only against a disposable vault and explicit approval flags.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -108,6 +125,8 @@ Prefer narrow validation for the changed package before broad checks.
 - Execution output is a structured event stream. Do not treat logs as progress.
 - History, trace, and replay are read-only. They must not spawn agents or re-read vault/source state.
 - Conformance checks must use out-of-process agents and isolated temp runtime roots; they must not pollute the developer's `.consoler` store.
+- Artifact blocks are references in V1d; renderers must not read or resolve artifact `uri` values unless a newer planning doc changes scope.
+- V1e real agent artifact blocks use logical `indbase://...` references; they still do not grant consoler ownership of indbase artifact storage or file access.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -126,6 +145,8 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
 - `docs/planning/v1b-action-history-trace-browser.md`: read-only action history and trace browser brief.
 - `docs/planning/v1c-conformance-harness.md`: conformance harness and `agentctl test` execution brief.
+- `docs/planning/v1d-diff-artifact-renderable-blocks.md`: diff/artifact renderable block execution brief.
+- `docs/planning/v1e-real-indbase-renderable-blocks.md`: real `indbase.ingest_file` diff/artifact adoption brief.
 
 ## Done Means
 

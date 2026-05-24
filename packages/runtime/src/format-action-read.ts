@@ -1,5 +1,6 @@
 import type { ActionHistoryEntry, ActionTrace } from "./action-read-types.js";
 import { shortActionId } from "./action-read.js";
+import { summarizeRenderableBlock } from "./format-block.js";
 
 export function formatActionHistory(entries: ActionHistoryEntry[]): string {
   if (entries.length === 0) {
@@ -86,7 +87,7 @@ export function formatActionTrace(trace: ActionTrace): string {
   if (trace.result_blocks.length) {
     lines.push(`Result blocks (${trace.result_blocks.length}):`);
     for (const block of trace.result_blocks) {
-      lines.push(`  ${block.type} (${block.block_id})`);
+      lines.push(`  ${summarizeRenderableBlock(block)}`);
     }
   }
 

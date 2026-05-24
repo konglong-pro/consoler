@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from consoler_agent_sdk.adapter import AgentAdapter
-from consoler_agent_sdk.blocks import json_block, markdown_block
+from consoler_agent_sdk.blocks import artifact_block, diff_block, json_block, markdown_block
 from consoler_agent_sdk.errors import AgentError
 from consoler_agent_sdk.events import EventEmitter, StepHelper
 
@@ -64,12 +64,34 @@ class ConformanceFakeAdapter(AgentAdapter):
         def work() -> dict[str, Any]:
             emitter.emit("log", message=f"message={args['message']}")
             emitter.emit("progress.updated", progress=0.5, message="halfway")
+            sample_diff = "\n".join(
+                [
+                    "--- a/fixture.txt",
+                    "+++ b/fixture.txt",
+                    "@@ -1 +1 @@",
+                    "-before",
+                    "+after",
+                ]
+            )
             return {
                 "blocks": [
                     markdown_block("# Conformance OK", title="result"),
                     json_block(
                         {"message": args["message"], "command": command},
                         title="payload",
+                    ),
+                    diff_block(
+                        sample_diff,
+                        from_label="before",
+                        to_label="after",
+                        title="sample-diff",
+                    ),
+                    artifact_block(
+                        "file:///tmp/conformance-fixture.txt",
+                        "text/plain",
+                        label="fixture.txt",
+                        metadata={"message": args["message"]},
+                        title="sample-artifact",
                     ),
                 ]
             }

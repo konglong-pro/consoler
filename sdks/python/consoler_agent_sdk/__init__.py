@@ -1,7 +1,7 @@
 """Minimal consoler agent SDK for V0 stdio JSON-RPC adapters."""
 
 from .adapter import AgentAdapter
-from .blocks import error_block, json_block, markdown_block, table_block
+from .blocks import artifact_block, diff_block, error_block, json_block, markdown_block, table_block
 from .errors import AgentError, normalize_error
 from .events import CancelFlag, EventEmitter, ProgressHelper, StepHelper
 from .server import JsonRpcServer
@@ -17,6 +17,8 @@ __all__ = [
     "JsonRpcServer",
     "ProgressHelper",
     "StepHelper",
+    "artifact_block",
+    "diff_block",
     "error_block",
     "json_block",
     "markdown_block",

@@ -11,6 +11,8 @@ from consoler_agent_sdk import (
     EventEmitter,
     JsonRpcServer,
     StepHelper,
+    artifact_block,
+    diff_block,
     normalize_error,
 )
 from consoler_agent_sdk.adapter import AgentAdapter
@@ -94,6 +96,26 @@ def test_normalize_error():
     err = normalize_error(ValueError("boom"))
     assert err.code == "agent.error"
     assert "boom" in err.message
+
+
+def test_diff_and_artifact_block_helpers():
+    diff = diff_block("--- a\n+++ b\n", from_label="a", to_label="b", title="changes")
+    assert diff["type"] == "diff"
+    assert diff["title"] == "changes"
+    assert diff["content"]["unified_diff"].startswith("--- a")
+    assert diff["content"]["from_label"] == "a"
+
+    art = artifact_block(
+        "file:///tmp/out.txt",
+        "text/plain",
+        label="out.txt",
+        metadata={"bytes": 3},
+        title="output",
+    )
+    assert art["type"] == "artifact"
+    assert art["content"]["uri"] == "file:///tmp/out.txt"
+    assert art["content"]["kind"] == "text/plain"
+    assert art["content"]["metadata"]["bytes"] == 3
 
 
 def test_jsonrpc_discover_dispatch(monkeypatch):
