@@ -52,6 +52,7 @@ export {
 } from "./action-read.js";
 export { formatActionHistory, formatActionTrace } from "./format-action-read.js";
 export { summarizeRenderableBlock } from "./format-block.js";
+export { validateInteractionResponse } from "./interaction-response.js";
 export { JsonRpcAgentClient, LineBufferParser, parseNdjsonLine } from "./transport/jsonrpc.js";
 export { loadRegistry, getEnabledAgent } from "./registry.js";
 export { consolerDataDir, databasePath, registryPath, findConsolerRoot } from "./paths.js";

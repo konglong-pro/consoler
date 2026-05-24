@@ -7,7 +7,7 @@ export function formatAgentctlHelp(): string {
     "  test <agent_id> [--command <name>] [--args <path>] [--approve-preview] [--approve] [--json]",
     "  plan <agent_id> <command> --args <path>",
     "  preview <agent_id> <command> --args <path> [--approve-preview]",
-    "  run <agent_id> <command> --args <path> [--approve-preview] [--approve]",
+    "  run <agent_id> <command> --args <path> [--approve-preview] [--approve] [--interaction-response <path>]",
     "  replay <action_id>",
     "  history [--limit 20] [--command <name>] [--status <status>] [--json]",
     "  trace <action_id> [--json]",

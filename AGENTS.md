@@ -24,6 +24,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Agentctl help/dev entry: `pnpm agentctl -- --help`
 - Test all: `pnpm test`
 - Conformance harness: `pnpm test:conformance`
+- Compiled agentctl smoke: `pnpm test:agentctl-smoke` (after `pnpm build`)
 - Python SDK tests: `pnpm test:python-sdk`
 - Single package test: `pnpm --filter @consoler/protocol test`
 - TUI package test: `pnpm --filter @consoler/tui test`
@@ -39,6 +40,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Ingest preview: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json`
 - Ingest probe: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview`
 - Ingest run: `pnpm agentctl -- run indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview --approve`
+- Interactive run (fake): `pnpm agentctl -- run conformance-fake conformance.interactive_choice --args <args.json> --approve --interaction-response <response.json>`
 - Indbase agent command: from `E:\indbase`, `uv run python -m indbase_agent`
 
 Prefer narrow validation for the changed package before broad checks.
@@ -58,6 +60,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V1g TUI cooperative cancel: start in `docs/planning/v1g-tui-cooperative-cancel.md`; wire V1f runtime cancel control into the Ink TUI without strong epoch or force-kill semantics.
 - V1h `interaction.required`: start in `docs/planning/v1h-interaction-required.md`; fake-first runtime/SDK/agentctl/TUI interaction loop with one pending interaction and no timeout or response persistence.
 - V1i interaction trace persistence: start in `docs/planning/v1i-interaction-trace-persistence.md`; persist interaction request/response records for trace without changing replay.
+- V1j agentctl run live interactions: start in `docs/planning/v1j-agentctl-run-live-interactions.md`; wire live `interaction.required` handling into `agentctl run` without protocol, SDK, TUI, or real indbase changes.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -130,7 +133,7 @@ Prefer narrow validation for the changed package before broad checks.
 
 - Interaction-required change:
   1. Read `docs/planning/v1h-interaction-required.md`.
-  2. Keep V1h fake-first; do not edit `E:\indbase` or add interactive prompts to `agentctl run`.
+  2. Keep V1h fake-first; do not edit `E:\indbase`. Use V1j for `agentctl run` live prompts.
   3. Allow one pending interaction per run; support choices plus simple object-schema input only.
   4. Do not add timeout policy, response persistence, `interactions` table, `system.*` events, strong epoch, or force-kill changes.
   5. Use conformance fake and `agentctl test --interaction-response <path>` for headless validation.
@@ -143,6 +146,14 @@ Prefer narrow validation for the changed package before broad checks.
   4. Keep replay accepted-events-only and response-free.
   5. Mark pending interactions `abandoned` when a run reaches terminal without response.
   6. Run focused runtime, agentctl, TUI, root conformance, Python SDK, typecheck, build, and root test checks.
+
+- Agentctl run live interaction change:
+  1. Read `docs/planning/v1j-agentctl-run-live-interactions.md`.
+  2. Keep stdout as final structured run JSON; send prompts and retry errors to stderr.
+  3. Use `executePreparedWithControl` and runtime `respondInteraction`; do not persist responses directly from agentctl.
+  4. Support `--interaction-response <path>` for non-TTY automation and fail fast without it.
+  5. Do not change protocol, Python SDK, TUI, real `E:\indbase`, timeout, redaction, multi-pending, strong epoch, or force-kill behavior.
+  6. Run focused agentctl/runtime checks, root conformance, Python SDK, typecheck, build, root test, and an isolated conformance fake `agentctl run` smoke.
 
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
@@ -167,6 +178,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V1g TUI cancel sends only a cancel request; the TUI must wait for agent-emitted `action.cancelled` before showing a cancelled terminal state.
 - V1h interactions are live transport responses only: persist `interaction.required` as an event, but do not persist user responses unless a newer planning doc changes scope.
 - V1i persists interaction responses for trace/debugging only; replay must remain accepted-events-only.
+- V1j makes `agentctl run` a live interaction client, but the runtime still owns interaction validation, response routing, persistence, and terminal state.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -191,6 +203,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1g-tui-cooperative-cancel.md`: Ink TUI cancel integration brief.
 - `docs/planning/v1h-interaction-required.md`: fake-first running interaction loop execution brief.
 - `docs/planning/v1i-interaction-trace-persistence.md`: interaction request/response trace persistence brief.
+- `docs/planning/v1j-agentctl-run-live-interactions.md`: `agentctl run` live interaction execution brief.
 
 ## Done Means
 

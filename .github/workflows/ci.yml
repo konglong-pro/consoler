@@ -19,6 +19,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check diff for whitespace errors
+        run: |
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}" HEAD
+          else
+            git diff --check HEAD~1 HEAD
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -56,3 +66,51 @@ jobs:
 
       - name: Test conformance harness
         run: pnpm test:conformance
+
+      - name: Test agentctl CLI smoke
+        run: pnpm test:agentctl-smoke
+
+  windows:
+    name: windows focused
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test deps
+        run: python -m pip install pytest
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test runtime
+        run: pnpm --filter @consoler/runtime test
+
+      - name: Test agentctl
+        run: pnpm --filter @consoler/agentctl test
+
+      - name: Test Python SDK
+        run: pnpm test:python-sdk
+
+      - name: Test agentctl CLI smoke
+        run: pnpm test:agentctl-smoke
