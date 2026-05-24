@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,11 @@ class ConformanceFakeAdapter(AgentAdapter):
         return json.loads(self.manifest_path().read_text(encoding="utf-8"))
 
     def validate(self, command: str, args: dict[str, Any]) -> None:
-        if command not in {"conformance.static_echo", "conformance.probe_echo"}:
+        if command not in {
+            "conformance.static_echo",
+            "conformance.probe_echo",
+            "conformance.slow_cancel",
+        }:
             raise AgentError("command.not_found", command)
         if not str(args.get("message", "")).strip():
             raise AgentError("args.invalid", "message is required")
@@ -60,6 +65,23 @@ class ConformanceFakeAdapter(AgentAdapter):
     ) -> dict[str, Any]:
         self.validate(command, args)
         cancel_flag.check("execute")
+
+        if command == "conformance.slow_cancel":
+            iterations = int(args.get("iterations", 200))
+            for index in range(iterations):
+                cancel_flag.check(f"loop-{index}")
+                emitter.emit("log", message=f"tick {index}: {args['message']}")
+                emitter.emit(
+                    "progress.updated",
+                    progress=min(0.99, (index + 1) / iterations),
+                    message=f"tick {index}",
+                )
+                time.sleep(0.05)
+            return {
+                "blocks": [
+                    markdown_block("# Should not finish", title="result"),
+                ]
+            }
 
         def work() -> dict[str, Any]:
             emitter.emit("log", message=f"message={args['message']}")

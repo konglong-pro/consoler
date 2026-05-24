@@ -32,6 +32,8 @@ export interface RunAgentConformanceInput {
   args?: Record<string, unknown>;
   approvePreview?: boolean;
   approve?: boolean;
+  /** Cooperative cancel: wait then call agent.cancel during execute. */
+  cancelAfterMs?: number;
   /** Remove temp rootDir when conformance created it. */
   cleanupTempRoot?: boolean;
 }

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any
 
 from .adapter import AgentAdapter
-from .errors import AgentError, normalize_error
+from .errors import AgentCancelled, AgentError, normalize_error
 from .events import CancelFlag, EventEmitter
 
 
@@ -13,6 +14,8 @@ class JsonRpcServer:
     def __init__(self, adapter: AgentAdapter) -> None:
         self.adapter = adapter
         self.cancel_flag = CancelFlag()
+        self._stdout_lock = threading.Lock()
+        self._execute_thread: threading.Thread | None = None
 
     def run(self) -> None:
         for line in sys.stdin:
@@ -25,10 +28,86 @@ class JsonRpcServer:
                 continue
             if "method" not in message:
                 continue
+            method = message.get("method")
+            if method == "agent.execute":
+                self._start_execute(message)
+                continue
             response = self._dispatch(message)
             if response is not None:
-                sys.stdout.write(json.dumps(response) + "\n")
-                sys.stdout.flush()
+                self._write_message(response)
+
+    def _write_message(self, message: dict[str, Any]) -> None:
+        with self._stdout_lock:
+            sys.stdout.write(json.dumps(message) + "\n")
+            sys.stdout.flush()
+
+    def _execute_busy(self) -> bool:
+        return self._execute_thread is not None and self._execute_thread.is_alive()
+
+    def _start_execute(self, message: dict[str, Any]) -> None:
+        request_id = message.get("id")
+        if self._execute_busy():
+            if request_id is not None:
+                err = AgentError("execute.busy", "Another agent.execute is already in progress")
+                self._write_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "error": {
+                            "code": -32000,
+                            "message": err.message,
+                            "data": err.to_dict(),
+                        },
+                    }
+                )
+            return
+
+        self.cancel_flag.reset()
+        params = message.get("params") or {}
+        self._execute_thread = threading.Thread(
+            target=self._execute_worker,
+            args=(request_id, params),
+            daemon=True,
+        )
+        self._execute_thread.start()
+
+    def _execute_worker(self, request_id: Any, params: dict[str, Any]) -> None:
+        try:
+            result = self._run_execute(params)
+            if request_id is None:
+                return
+            self._write_message({"jsonrpc": "2.0", "id": request_id, "result": result})
+        except AgentError as err:
+            if request_id is None:
+                return
+            self._write_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32000,
+                        "message": err.message,
+                        "data": err.to_dict(),
+                    },
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            if request_id is None:
+                return
+            err = normalize_error(exc)
+            self._write_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32000,
+                        "message": err.message,
+                        "data": err.to_dict(),
+                    },
+                }
+            )
+        finally:
+            self._execute_thread = None
 
     def _dispatch(self, message: dict[str, Any]) -> dict[str, Any] | None:
         request_id = message.get("id")
@@ -75,8 +154,6 @@ class JsonRpcServer:
                 params["args"],
                 params.get("plan"),
             )
-        if method == "agent.execute":
-            return self._execute(params)
         if method == "agent.cancel":
             self.cancel_flag.requested = True
             return self.adapter.cancel()
@@ -84,7 +161,7 @@ class JsonRpcServer:
             return self.adapter.health()
         raise AgentError("method.not_found", f"Unknown method: {method}")
 
-    def _execute(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _run_execute(self, params: dict[str, Any]) -> dict[str, Any]:
         manifest = self.adapter.load_manifest()
         run_id = params["run_id"]
         action_id = params["action_id"]
@@ -98,8 +175,7 @@ class JsonRpcServer:
                 "method": "agent.event",
                 "params": {"event": event},
             }
-            sys.stdout.write(json.dumps(notification) + "\n")
-            sys.stdout.flush()
+            self._write_message(notification)
 
         emitter = EventEmitter(
             run_id=run_id,
@@ -125,6 +201,12 @@ class JsonRpcServer:
             else:
                 emitter.emit("action.succeeded")
             return {"ok": True}
+        except AgentCancelled as cancelled:
+            emitter.emit(
+                "action.cancelled",
+                message=f"Cancelled at {cancelled.checkpoint}",
+            )
+            return {"ok": False, "cancelled": True}
         except Exception as exc:  # noqa: BLE001
             err = normalize_error(exc)
             emitter.emit("action.failed", error=err.to_dict())

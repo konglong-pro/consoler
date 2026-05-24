@@ -54,6 +54,8 @@ Prefer narrow validation for the changed package before broad checks.
 - V1c conformance harness / `agentctl test`: start in `docs/planning/v1c-conformance-harness.md`; create `packages/conformance/` and keep default checks non-executing.
 - V1d diff/artifact renderable blocks: start in `docs/planning/v1d-diff-artifact-renderable-blocks.md`; extend protocol/renderers without adding artifact storage.
 - V1e real indbase renderable blocks: start in `docs/planning/v1e-real-indbase-renderable-blocks.md`; wire existing diff/artifact blocks into `E:\indbase` execution results only.
+- V1f cooperative cancel: start in `docs/planning/v1f-cooperative-cancel.md`; prove SDK/runtime/agentctl cancel without TUI or strong epoch semantics.
+- V1g TUI cooperative cancel: start in `docs/planning/v1g-tui-cooperative-cancel.md`; wire V1f runtime cancel control into the Ink TUI without strong epoch or force-kill semantics.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -108,6 +110,22 @@ Prefer narrow validation for the changed package before broad checks.
   5. Run focused consoler protocol/TUI/conformance/agentctl/Python SDK checks, then `pnpm typecheck`.
   6. Smoke with `agentctl test indbase --command indbase.ingest_file` only against a disposable vault and explicit approval flags.
 
+- Cooperative cancel change:
+  1. Read `docs/planning/v1f-cooperative-cancel.md`.
+  2. Keep V1f SDK/runtime/agentctl/conformance-only; do not add TUI cancel controls.
+  3. Keep `epoch: 0`; do not introduce strong cancel race handling or force-kill fallback.
+  4. Require the agent to emit `action.cancelled`; runtime must not fake a cancelled terminal event.
+  5. Run Python SDK, runtime, conformance, agentctl, root conformance, typecheck, build, and root test checks.
+  6. Use the conformance fake slow command for cancel smoke; real `indbase.ingest_file` cancel is not a required gate.
+
+- TUI cooperative cancel change:
+  1. Read `docs/planning/v1g-tui-cooperative-cancel.md`.
+  2. Keep cancel request distinct from cancelled terminal event.
+  3. Use injected/mock runtime tests; do not require real indbase cancellation.
+  4. Do not add strong epoch, force-kill, protocol, SDK, or `E:\indbase` changes.
+  5. Run focused TUI, runtime, conformance, agentctl, Python SDK, root conformance, typecheck, build, and root test checks.
+  6. Harden the existing history/trace TUI flake only with minimal test timing/input changes.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -127,6 +145,8 @@ Prefer narrow validation for the changed package before broad checks.
 - Conformance checks must use out-of-process agents and isolated temp runtime roots; they must not pollute the developer's `.consoler` store.
 - Artifact blocks are references in V1d; renderers must not read or resolve artifact `uri` values unless a newer planning doc changes scope.
 - V1e real agent artifact blocks use logical `indbase://...` references; they still do not grant consoler ownership of indbase artifact storage or file access.
+- V1f cancel is cooperative only: a cancel request is not a cancelled terminal state until the agent emits `action.cancelled`.
+- V1g TUI cancel sends only a cancel request; the TUI must wait for agent-emitted `action.cancelled` before showing a cancelled terminal state.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -147,6 +167,8 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1c-conformance-harness.md`: conformance harness and `agentctl test` execution brief.
 - `docs/planning/v1d-diff-artifact-renderable-blocks.md`: diff/artifact renderable block execution brief.
 - `docs/planning/v1e-real-indbase-renderable-blocks.md`: real `indbase.ingest_file` diff/artifact adoption brief.
+- `docs/planning/v1f-cooperative-cancel.md`: SDK/runtime/agentctl cooperative cancel execution brief.
+- `docs/planning/v1g-tui-cooperative-cancel.md`: Ink TUI cancel integration brief.
 
 ## Done Means
 

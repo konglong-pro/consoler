@@ -78,6 +78,13 @@ export interface RuntimeTerminalResult {
   events: ActionEvent[];
 }
 
+export interface PreparedExecutionControl {
+  run_id: string;
+  done: Promise<RuntimeTerminalResult>;
+  cancel: () => Promise<unknown>;
+  close: () => void;
+}
+
 export interface RunWithEventsResult {
   action_id: string;
   run_id: string;

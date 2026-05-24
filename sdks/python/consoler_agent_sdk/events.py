@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from .errors import AgentCancelled
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -48,6 +50,8 @@ class StepHelper:
         self.emitter.emit("step.started", step_id=step_id, message=title)
         try:
             result = fn()
+        except AgentCancelled:
+            raise
         except Exception as exc:  # noqa: BLE001
             self.emitter.emit("step.completed", step_id=step_id, message=f"{title} failed")
             raise exc
@@ -71,6 +75,9 @@ class ProgressHelper:
 class CancelFlag:
     requested: bool = False
 
+    def reset(self) -> None:
+        self.requested = False
+
     def check(self, checkpoint: str) -> None:
         if self.requested:
-            raise RuntimeError(f"cancelled at {checkpoint}")
+            raise AgentCancelled(checkpoint)

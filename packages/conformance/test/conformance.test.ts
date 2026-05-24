@@ -46,6 +46,21 @@ describe("conformance harness", () => {
     expect(report.passed).toBe(true);
   });
 
+  it("cancels slow command and verifies cancelled terminal", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.slow_cancel",
+      args: { message: "cancel-me" },
+      approve: true,
+      cancelAfterMs: 100
+    });
+    expect(report.passed).toBe(true);
+    expect(report.checks.find((row) => row.id === "cancel.terminal_state")?.status).toBe("passed");
+    expect(report.checks.find((row) => row.id === "cancel.no_succeeded")?.status).toBe("passed");
+    expect(report.checks.find((row) => row.id === "cancel.history_status")?.status).toBe("passed");
+  });
+
   it("executes static command with diff and artifact blocks in trace and replay", async () => {
     const report = await runAgentConformance({
       agentId: FAKE_AGENT_ID,

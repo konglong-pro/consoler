@@ -1,5 +1,6 @@
 export {
   ConsolerRuntime,
+  type PreparedExecutionControl,
   type CommandArgsInput,
   type ConsolerRuntimeOptions,
   type PreparedAction,
@@ -13,6 +14,7 @@ export {
   type RunWithEventsResult
 } from "./runtime.js";
 export { ConsolerStore } from "./db/store.js";
+export type { EventIngestResult } from "./event-store.js";
 export { computePlanHash, computePreviewHash, computeSideEffectsHash } from "./plan-hash.js";
 export {
   buildApprovalToken,

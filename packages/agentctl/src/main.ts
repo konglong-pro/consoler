@@ -104,6 +104,10 @@ program
   .option("--args <path>", "Path to JSON args file (required with --command)")
   .option("--approve-preview", "Approve probe preview before planning", false)
   .option("--approve", "Approve and execute during conformance", false)
+  .option(
+    "--cancel-after-ms <n>",
+    "Request cooperative cancel after N ms (requires --command --args --approve)"
+  )
   .option("--json", "Emit structured conformance report", false)
   .description("Run agent protocol conformance checks (non-executing by default)")
   .action(
@@ -114,6 +118,7 @@ program
         args?: string;
         approvePreview?: boolean;
         approve?: boolean;
+        cancelAfterMs?: string;
         json?: boolean;
       }
     ) => {
@@ -137,6 +142,27 @@ program
         process.exitCode = 1;
         return;
       }
+      if (options.cancelAfterMs !== undefined) {
+        if (!options.command || !options.args) {
+          console.error("--cancel-after-ms requires --command and --args");
+          process.exitCode = 1;
+          return;
+        }
+        if (!options.approve) {
+          console.error("--cancel-after-ms requires --approve");
+          process.exitCode = 1;
+          return;
+        }
+        const parsed = Number(options.cancelAfterMs);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          console.error("--cancel-after-ms must be a non-negative number");
+          process.exitCode = 1;
+          return;
+        }
+      }
+
+      const cancelAfterMs =
+        options.cancelAfterMs !== undefined ? Number(options.cancelAfterMs) : undefined;
 
       const report = await runAgentConformance({
         agentId,
@@ -145,6 +171,7 @@ program
         ...(options.args ? { args: loadArgs(options.args) } : {}),
         approvePreview: Boolean(options.approvePreview),
         approve: Boolean(options.approve),
+        ...(cancelAfterMs !== undefined ? { cancelAfterMs } : {}),
         cleanupTempRoot: true
       });
 

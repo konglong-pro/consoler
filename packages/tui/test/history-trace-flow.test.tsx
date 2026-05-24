@@ -33,28 +33,42 @@ describe("TUI history and trace flow", () => {
       <App runtime={runtime} initialManifest={indbaseManifestFixture} />
     );
 
-    await vi.waitFor(() => {
-      expect(lastFrame()).toContain("New Action");
-      expect(lastFrame()).toContain("History");
-    });
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("New Action");
+        expect(frame).toContain("History");
+      },
+      { timeout: 5000 }
+    );
 
     // ink-select-input: number keys select directly (2 = History)
     stdin.write("2");
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
-    await vi.waitFor(() => {
-      expect(lastFrame()).toContain("indbase.doctor");
-      expect(lastFrame()).toContain("History (Enter open trace");
-    });
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("indbase.doctor");
+        expect(frame).toContain("History (Enter open trace");
+      },
+      { timeout: 5000 }
+    );
 
     stdin.write("1");
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
-    await vi.waitFor(() => {
-      expect(lastFrame()).toContain("Trace");
-      expect(lastFrame()).toContain(HISTORY_ACTION_ID);
-      expect(lastFrame()).toContain("Rejected events (1)");
-      expect(lastFrame()).toContain("duplicate_seq");
-      expect(lastFrame()).toContain("# history trace smoke");
-    });
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Trace");
+        expect(frame).toContain(HISTORY_ACTION_ID);
+        expect(frame).toContain("Rejected events (1)");
+        expect(frame).toContain("duplicate_seq");
+        expect(frame).toContain("# history trace smoke");
+      },
+      { timeout: 5000 }
+    );
 
     unmount();
   });

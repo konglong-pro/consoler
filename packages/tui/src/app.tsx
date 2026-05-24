@@ -11,7 +11,9 @@ import {
   ConsolerRuntime,
   requiresPreviewApproval,
   type PreparedAction,
-  type RuntimeEventHandlers
+  type PreparedExecutionControl,
+  type RuntimeEventHandlers,
+  type RuntimeTerminalResult
 } from "@consoler/runtime";
 
 import { historyItemDetail, historyItemLabel } from "./history-label.js";
@@ -56,9 +58,17 @@ export interface AppProps {
   initialManifest?: AgentManifest;
   /** Test-only: start on trace with JSON tab without keyboard navigation */
   testTraceView?: { trace: ActionTrace; tab?: TabId };
+  /** Test-only: open directly on execution approval */
+  testPrepared?: PreparedAction;
 }
 
-export function App({ replayActionId, runtime: runtimeProp, initialManifest, testTraceView }: AppProps) {
+export function App({
+  replayActionId,
+  runtime: runtimeProp,
+  initialManifest,
+  testTraceView,
+  testPrepared
+}: AppProps) {
   const { exit } = useApp();
   const runtime = useMemo(() => runtimeProp ?? new ConsolerRuntime(), [runtimeProp]);
 
@@ -79,9 +89,26 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
   const [replayEvents, setReplayEvents] = useState<ActionEvent[]>([]);
   const [historyEntries, setHistoryEntries] = useState<ActionHistoryEntry[]>([]);
   const [trace, setTrace] = useState<ActionTrace | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const [executionOutcome, setExecutionOutcome] = useState<RuntimeTerminalResult["state"] | null>(
+    null
+  );
   const [focusedField, setFocusedField] = useState(0);
   const formValuesRef = useRef<Record<string, unknown>>({});
   const submitFlushRef = useRef(false);
+  const executionControlRef = useRef<PreparedExecutionControl | null>(null);
+  const cancelRequestedRef = useRef(false);
+
+  const closeExecutionControl = useCallback(() => {
+    executionControlRef.current?.close();
+    executionControlRef.current = null;
+  }, []);
+
+  const resetExecutionSession = useCallback(() => {
+    cancelRequestedRef.current = false;
+    setCancelRequested(false);
+    setExecutionOutcome(null);
+  }, []);
 
   const logEvents = useMemo(() => events.filter((e) => e.type === "log"), [events]);
 
@@ -101,13 +128,28 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
       loadReplay(replayActionId);
       return;
     }
+    if (testPrepared) {
+      if (initialManifest) setManifest(initialManifest);
+      setPrepared(testPrepared);
+      resetExecutionSession();
+      setEvents([]);
+      setBlocks([]);
+      setPhase("prepared");
+      return;
+    }
     if (initialManifest) {
       setManifest(initialManifest);
       setPhase("home");
       return;
     }
     void bootstrap();
-  }, [replayActionId, initialManifest, testTraceView]);
+  }, [replayActionId, initialManifest, testPrepared, testTraceView, resetExecutionSession]);
+
+  useEffect(() => {
+    return () => {
+      closeExecutionControl();
+    };
+  }, [closeExecutionControl]);
 
   const bootstrap = async () => {
     try {
@@ -138,6 +180,8 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
     setPreviewApproval(null);
     setProbePreview(null);
     setPrepared(null);
+    resetExecutionSession();
+    closeExecutionControl();
     setError(null);
     setFocusedField(0);
     setPhase("form");
@@ -205,6 +249,8 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
           probePreview: probePreview ?? undefined
         });
         setPrepared(bundle);
+        resetExecutionSession();
+        closeExecutionControl();
         setEvents([]);
         setBlocks([]);
         setPhase("prepared");
@@ -214,7 +260,7 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
         setBusy(false);
       }
     },
-    [fields, manifest, probePreview, runtime, selectedCommand]
+    [closeExecutionControl, fields, manifest, probePreview, resetExecutionSession, runtime, selectedCommand]
   );
 
   const approveProbePreview = async () => {
@@ -232,6 +278,8 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
       setProbePreview(preview ?? null);
       const bundle = await runtime.prepareAction(input, { probePreview: preview });
       setPrepared(bundle);
+      resetExecutionSession();
+      closeExecutionControl();
       setEvents([]);
       setBlocks([]);
       setPhase("prepared");
@@ -258,28 +306,54 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
     if (!prepared || phase !== "prepared") return;
     setError(null);
     setBusy(true);
+    resetExecutionSession();
+    closeExecutionControl();
+    setEvents([]);
+    setBlocks([]);
     setPhase("running");
     const handlers: RuntimeEventHandlers = {
       onEvent: (event: ActionEvent) => {
         setEvents((prev) => [...prev, event]);
       }
     };
+    const control = runtime.executePreparedWithControl(prepared, handlers);
+    executionControlRef.current = control;
     try {
-      const terminal = await runtime.executePrepared(prepared, handlers);
-      setBlocks(blocksFromEvents(terminal.events));
+      const terminal = await control.done;
+      setExecutionOutcome(terminal.state);
+      if (terminal.state === "succeeded") {
+        setBlocks(blocksFromEvents(terminal.events));
+      } else {
+        setBlocks([]);
+      }
       setPhase("finished");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("prepared");
     } finally {
+      closeExecutionControl();
       setBusy(false);
     }
   };
 
+  const requestRuntimeCancel = () => {
+    const control = executionControlRef.current;
+    if (!control || cancelRequestedRef.current) return;
+    cancelRequestedRef.current = true;
+    setCancelRequested(true);
+    void control.cancel().catch((err) => {
+      cancelRequestedRef.current = false;
+      setCancelRequested(false);
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  };
+
   const cancelApproval = () => {
+    closeExecutionControl();
     setPrepared(null);
     setPreviewApproval(null);
     setProbePreview(null);
+    resetExecutionSession();
     setPhase("form");
     setError(null);
   };
@@ -349,6 +423,10 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
     }
     if (phase === "prepared" && input === "n") {
       cancelApproval();
+      return;
+    }
+    if (phase === "running" && input === "c") {
+      requestRuntimeCancel();
     }
   });
 
@@ -521,6 +599,18 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
           </Box>
         ) : null}
 
+        {phase === "running" && cancelRequested ? (
+          <Box marginTop={1}>
+            <Text color="yellow">Cancel requested; waiting for agent checkpoint</Text>
+          </Box>
+        ) : null}
+
+        {phase === "finished" && executionOutcome === "cancelled" ? (
+          <Box marginTop={1}>
+            <Text color="yellow">Execution cancelled.</Text>
+          </Box>
+        ) : null}
+
         {phase === "running" || phase === "finished" ? (
           <Box flexDirection="column" marginTop={1}>
             <Text bold>Live timeline</Text>
@@ -581,16 +671,22 @@ export function App({ replayActionId, runtime: runtimeProp, initialManifest, tes
 
       <Box marginTop={1}>
         <Text dimColor>
-        {phase === "home"
-          ? "Enter select | Esc —"
-          : phase === "history"
-            ? "Enter trace | Esc home"
-            : phase === "trace"
-              ? "r replay | Esc history | Ctrl+Tab JSON"
-              : phase === "form"
-                ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
-                : "Tab bottom panels"}{" "}
-        | y/n approve | Esc back | Ctrl+C exit
+          {phase === "home"
+            ? "Enter select | Esc —"
+            : phase === "history"
+              ? "Enter trace | Esc home"
+              : phase === "trace"
+                ? "r replay | Esc history | Ctrl+Tab JSON"
+                : phase === "form"
+                  ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
+                  : phase === "running"
+                    ? cancelRequested
+                      ? "Cancel requested; waiting for agent checkpoint"
+                      : "c cancel"
+                    : phase === "prepared" || phase === "preview_approval"
+                      ? "y/n approve"
+                      : "Tab bottom panels"}{" "}
+          | Esc back | Ctrl+C exit
         </Text>
       </Box>
     </Box>

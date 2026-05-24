@@ -3,6 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 
+class AgentCancelled(Exception):
+    """Raised when cooperative cancel is requested at a checkpoint."""
+
+    def __init__(self, checkpoint: str) -> None:
+        self.checkpoint = checkpoint
+        super().__init__(f"cancelled at {checkpoint}")
+
+
 class AgentError(Exception):
     def __init__(
         self,
@@ -32,6 +40,13 @@ class AgentError(Exception):
 def normalize_error(exc: BaseException) -> AgentError:
     if isinstance(exc, AgentError):
         return exc
+    if isinstance(exc, AgentCancelled):
+        return AgentError(
+            "action.cancelled",
+            str(exc),
+            details={"checkpoint": exc.checkpoint},
+            retryable=False,
+        )
     return AgentError(
         code="agent.error",
         message=str(exc),

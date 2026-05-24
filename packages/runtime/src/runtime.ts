@@ -3,6 +3,7 @@ import {
   newActionId,
   newPlanId,
   newRunId,
+  TERMINAL_EVENT_TYPES,
   validateCommandArgs,
   validateManifest,
   type ActionDraft,
@@ -32,6 +33,7 @@ import type {
   PreparedAction,
   PreviewLifecycleResult,
   PreviewOptions,
+  PreparedExecutionControl,
   RuntimeEventHandlers,
   RuntimeTerminalResult,
   RunOptions,
@@ -53,6 +55,7 @@ export type {
   PreparedAction,
   PreviewLifecycleResult,
   PreviewOptions,
+  PreparedExecutionControl,
   RuntimeEventHandlers,
   RuntimeLifecycleState,
   RuntimeTerminalResult,
@@ -200,10 +203,10 @@ export class ConsolerRuntime {
     };
   }
 
-  async executePrepared(
+  executePreparedWithControl(
     prepared: PreparedAction,
     handlers: RuntimeEventHandlers = {}
-  ): Promise<RuntimeTerminalResult> {
+  ): PreparedExecutionControl {
     const driftReason = verifyApprovalStillValid(
       prepared.approval,
       { entry: prepared.entry, manifest: prepared.manifest, args: prepared.action.args },
@@ -220,6 +223,24 @@ export class ConsolerRuntime {
     this.store.createRun(runId, prepared.action.action_id, prepared.action.agent_id, prepared.action.command);
 
     const acceptedEvents: ActionEvent[] = [];
+    let settled = false;
+    let resolveDone!: (value: RuntimeTerminalResult) => void;
+    let rejectDone!: (error: Error) => void;
+    const done = new Promise<RuntimeTerminalResult>((resolve, reject) => {
+      resolveDone = resolve;
+      rejectDone = reject;
+    });
+
+    const maybeFinish = (): void => {
+      if (settled) return;
+      const hasTerminal = acceptedEvents.some((event) => TERMINAL_EVENT_TYPES.has(event.type));
+      if (!hasTerminal) return;
+      settled = true;
+      const state = terminalStateFromEvents(acceptedEvents);
+      handlers.onStateChange?.(state);
+      resolveDone({ run_id: runId, state, events: [...acceptedEvents] });
+    };
+
     const execClient = this.spawnClient(prepared.entry, (notification) => {
       if (notification.method !== "agent.event") return;
       const raw = notification.params?.["event"];
@@ -234,25 +255,56 @@ export class ConsolerRuntime {
       if (ingest.accepted && ingest.event) {
         acceptedEvents.push(ingest.event);
         handlers.onEvent?.(ingest.event, ingest);
+        maybeFinish();
       } else if (ingest.event) {
         handlers.onEvent?.(ingest.event, ingest);
       }
     });
 
-    await this.withClient(execClient, async () => {
-      await execClient.request("agent.execute", {
-        action_id: prepared.action.action_id,
-        run_id: runId,
-        command: prepared.action.command,
-        args: prepared.action.args,
-        plan: prepared.plan,
-        approval: prepared.approval
-      });
+    const executePromise = execClient.request("agent.execute", {
+      action_id: prepared.action.action_id,
+      run_id: runId,
+      command: prepared.action.command,
+      args: prepared.action.args,
+      plan: prepared.plan,
+      approval: prepared.approval
     });
 
-    const terminal = terminalStateFromEvents(acceptedEvents);
-    handlers.onStateChange?.(terminal);
-    return { run_id: runId, state: terminal, events: acceptedEvents };
+    void executePromise
+      .then(() => {
+        maybeFinish();
+        if (!settled) {
+          settled = true;
+          const state = terminalStateFromEvents(acceptedEvents);
+          handlers.onStateChange?.(state);
+          resolveDone({ run_id: runId, state, events: [...acceptedEvents] });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!settled) {
+          settled = true;
+          rejectDone(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
+
+    return {
+      run_id: runId,
+      done,
+      cancel: () => execClient.request("agent.cancel", {}),
+      close: () => execClient.kill()
+    };
+  }
+
+  async executePrepared(
+    prepared: PreparedAction,
+    handlers: RuntimeEventHandlers = {}
+  ): Promise<RuntimeTerminalResult> {
+    const control = this.executePreparedWithControl(prepared, handlers);
+    try {
+      return await control.done;
+    } finally {
+      control.close();
+    }
   }
 
   async runWithEvents(

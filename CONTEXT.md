@@ -59,3 +59,19 @@ A `RenderableBlock` with `type: "diff"` whose `content` carries a unified diff s
 A `RenderableBlock` with `type: "artifact"` whose `content` references produced output by `uri` and `kind`, with optional `label` and `metadata`. In V1d, artifact blocks are event-carried references only: TUI, trace, and replay may display metadata but must not open or resolve the `uri` unless a future planning doc adds artifact storage and fetch.
 
 For `indbase.ingest_file`, artifact blocks use logical `indbase://ingest_runs/...`, `indbase://documents/...`, and `indbase://document_revisions/...` URIs. These are consoler renderable references to indbase entities, not indbase internal durable evidence artifacts and not filesystem paths.
+
+## Cooperative Cancel
+
+A non-preemptive action stop flow where the runtime asks an executing agent to stop and the agent decides when to observe that request. It is not a forced process kill and does not by itself create a terminal action state.
+
+## Cancel Request
+
+The runtime-side request that asks an executing agent to stop. A cancel request is only intent; the action is still running until the event stream reaches a terminal event.
+
+## Cancel Checkpoint
+
+An agent-owned point in execution where the agent checks whether cancellation has been requested and can stop cleanly before continuing work.
+
+## Cancelled Terminal Event
+
+The event-stream fact that an action ended because cancellation was observed by the agent. In the current protocol this is represented by `action.cancelled` and is distinct from a cancel request.

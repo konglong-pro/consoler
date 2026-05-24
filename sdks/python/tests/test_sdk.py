@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from consoler_agent_sdk import (
+    AgentCancelled,
     AgentError,
     CancelFlag,
     EventEmitter,
@@ -88,8 +89,62 @@ def test_step_helper_emits_started_completed():
 def test_cancel_flag_checkpoint():
     flag = CancelFlag()
     flag.requested = True
-    with pytest.raises(RuntimeError, match="cancelled"):
+    with pytest.raises(AgentCancelled, match="cancelled at phase"):
         flag.check("phase")
+
+
+class CancelOnExecuteAdapter(AgentAdapter):
+    def manifest_path(self) -> Path:
+        return Path(__file__).parent / "manifest.json"
+
+    def load_manifest(self) -> dict:
+        return {
+            "agent_id": "cancel-test",
+            "name": "cancel-test",
+            "version": "0.0.1",
+            "protocol_version": "0",
+            "commands": [],
+        }
+
+    def validate(self, command: str, args: dict) -> None:
+        return None
+
+    def plan(self, command: str, args: dict, action_id: str) -> dict:
+        return {"steps": [], "side_effects": []}
+
+    def preview(self, command: str, args: dict, plan: dict | None = None) -> dict:
+        return {"summary": "static"}
+
+    def execute(self, command: str, args: dict, plan: dict, **kwargs) -> dict:
+        raise AgentCancelled("mid-run")
+
+
+def test_run_execute_emits_cancelled_terminal():
+    server = JsonRpcServer(CancelOnExecuteAdapter())
+    published: list[dict] = []
+
+    def capture(message: dict) -> None:
+        if message.get("method") == "agent.event":
+            published.append(message["params"]["event"])
+
+    server._write_message = capture  # type: ignore[method-assign]
+
+    result = server._run_execute(
+        {
+            "run_id": "run_1",
+            "action_id": "act_1",
+            "command": "test.cancel",
+            "args": {},
+            "plan": {"steps": []},
+        }
+    )
+
+    assert result == {"ok": False, "cancelled": True}
+    terminal_types = [event["type"] for event in published]
+    assert "action.started" in terminal_types
+    assert "action.cancelled" in terminal_types
+    assert "action.succeeded" not in terminal_types
+    assert "action.failed" not in terminal_types
 
 
 def test_normalize_error():

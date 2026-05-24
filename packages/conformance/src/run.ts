@@ -16,7 +16,8 @@ import {
   isProbeReadonlyPreview,
   JsonRpcAgentClient,
   loadRegistry,
-  replayAction
+  replayAction,
+  type PreparedExecutionControl
 } from "@consoler/runtime";
 
 import {
@@ -202,7 +203,7 @@ async function runCommandChecks(
   manifest: AgentManifest,
   command: string,
   args: Record<string, unknown>,
-  options: { approvePreview?: boolean; approve?: boolean }
+  options: { approvePreview?: boolean; approve?: boolean; cancelAfterMs?: number }
 ): Promise<ConformanceCheck[]> {
   const checks: ConformanceCheck[] = [];
   const commandDef = getCommandDef(manifest, command);
@@ -311,7 +312,153 @@ async function runCommandChecks(
     return checks;
   }
 
+  if (options.cancelAfterMs !== undefined) {
+    return [...checks, ...(await runCancelExecuteChecks(runtime, prepared, options.cancelAfterMs))];
+  }
+
   return [...checks, ...(await runExecuteChecks(runtime, prepared))];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function runCancelExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>,
+  cancelAfterMs: number
+): Promise<ConformanceCheck[]> {
+  const checks: ConformanceCheck[] = [];
+  const accepted: ActionEvent[] = [];
+  let control: PreparedExecutionControl;
+
+  try {
+    control = runtime.executePreparedWithControl(prepared, {
+      onEvent: (event: ActionEvent, ingest: { accepted: boolean }) => {
+        if (ingest.accepted) {
+          accepted.push(event);
+        }
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    return checks;
+  }
+
+  await sleep(cancelAfterMs);
+
+  try {
+    const cancelResult = (await control.cancel()) as Record<string, unknown>;
+    const status = cancelResult["status"];
+    checks.push(
+      check(
+        "cancel.agent_response",
+        "agent.cancel response",
+        status === "cancel_requested" ? "passed" : "failed",
+        String(status ?? "missing status")
+      )
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("cancel.agent_response", "agent.cancel response", "failed", message));
+    control.close();
+    return checks;
+  }
+
+  let terminal: Awaited<ReturnType<ConsolerRuntime["executePrepared"]>>;
+  try {
+    terminal = await control.done;
+    checks.push(
+      check("command.execute", "Execute", "passed", `terminal=${terminal.state}`)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    control.close();
+    return checks;
+  } finally {
+    control.close();
+  }
+
+  const cancelled = terminal.state === "cancelled";
+  checks.push(
+    check(
+      "cancel.terminal_state",
+      "Cancelled terminal state",
+      cancelled ? "passed" : "failed",
+      `terminal=${terminal.state}`
+    )
+  );
+
+  const hasCancelledEvent = accepted.some((event) => event.type === "action.cancelled");
+  checks.push(
+    check(
+      "cancel.terminal_event",
+      "action.cancelled event",
+      hasCancelledEvent ? "passed" : "failed",
+      hasCancelledEvent ? "action.cancelled present" : "Missing action.cancelled"
+    )
+  );
+
+  const hasSucceeded = accepted.some((event) => event.type === "action.succeeded");
+  checks.push(
+    check(
+      "cancel.no_succeeded",
+      "No action.succeeded",
+      hasSucceeded ? "failed" : "passed",
+      hasSucceeded ? "action.succeeded must not follow cancel" : "no action.succeeded"
+    )
+  );
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  checks.push(
+    check(
+      "cancel.trace_terminal",
+      "Trace cancelled terminal",
+      trace.terminal_state === "cancelled" ? "passed" : "failed",
+      `terminal_state=${trace.terminal_state ?? "none"}`
+    )
+  );
+
+  if (trace.rejected_events.length > 0) {
+    checks.push(
+      check(
+        "cancel.no_rejected",
+        "No rejected events",
+        "failed",
+        `${trace.rejected_events.length} rejected event(s)`
+      )
+    );
+  } else {
+    checks.push(check("cancel.no_rejected", "No rejected events", "passed", "0 rejected"));
+  }
+
+  const history = runtime.listActionHistory({ limit: 20 });
+  const row = history.find((entry) => entry.action_id === actionId);
+  checks.push(
+    check(
+      "cancel.history_status",
+      "History cancelled status",
+      row?.status === "cancelled" ? "passed" : "failed",
+      row ? `status=${row.status}` : "action missing from history"
+    )
+  );
+
+  const replay = runtime.getReplay(actionId);
+  checks.push(
+    check(
+      "cancel.replay",
+      "Replay accepted-only",
+      replay.events.length === trace.accepted_events.length ? "passed" : "failed",
+      `replay=${replay.events.length} trace=${trace.accepted_events.length}`
+    )
+  );
+
+  return checks;
 }
 
 async function runExecuteChecks(
@@ -513,19 +660,31 @@ export async function runAgentConformance(
           )
         );
       } else {
-        const commandChecks = await runCommandChecks(
-          rootDir,
-          runtime,
-          input.agentId,
-          base.manifest,
-          input.command,
-          input.args,
-          {
-            ...(input.approvePreview ? { approvePreview: true } : {}),
-            ...(input.approve ? { approve: true } : {})
-          }
-        );
-        checks.push(...commandChecks);
+        if (input.cancelAfterMs !== undefined && !input.approve) {
+          checks.push(
+            check(
+              "command.cancel_mode",
+              "Cancel mode",
+              "failed",
+              "--cancel-after-ms requires --approve"
+            )
+          );
+        } else {
+          const commandChecks = await runCommandChecks(
+            rootDir,
+            runtime,
+            input.agentId,
+            base.manifest,
+            input.command,
+            input.args,
+            {
+              ...(input.approvePreview ? { approvePreview: true } : {}),
+              ...(input.approve ? { approve: true } : {}),
+              ...(input.cancelAfterMs !== undefined ? { cancelAfterMs: input.cancelAfterMs } : {})
+            }
+          );
+          checks.push(...commandChecks);
+        }
       }
     } else if (input.approve || input.approvePreview) {
       checks.push(
