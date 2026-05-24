@@ -18,7 +18,8 @@ const sampleEntry: ActionHistoryEntry = {
   has_plan: true,
   has_context: true,
   has_approval: true,
-  terminal_state: "succeeded"
+  terminal_state: "succeeded",
+  interaction_count: 0
 };
 
 describe("history labels", () => {

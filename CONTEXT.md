@@ -82,7 +82,7 @@ A structured prompt an agent emits during execution as an `interaction.required`
 
 ## Interaction Response
 
-The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1h does not persist responses as separate events or database rows; only the agent’s subsequent execution events are stored.
+The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1i persists the full response JSON in the `interactions` table for trace and history debugging. Replay remains accepted agent events only and does not include interaction responses.
 
 ## Pending Interaction
 

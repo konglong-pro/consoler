@@ -36,6 +36,8 @@ export type {
   ActionHistoryStatus,
   ActionRunSummary,
   ActionTrace,
+  InteractionTraceRecord,
+  InteractionTraceStatus,
   ListActionHistoryOptions,
   RejectedEventRecord
 } from "./action-read-types.js";

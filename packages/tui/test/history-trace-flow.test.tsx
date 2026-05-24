@@ -98,6 +98,44 @@ describe("TUI history and trace flow", () => {
     unmount();
   });
 
+  it("renders interaction records in trace view", async () => {
+    runtime.store.insertPendingInteraction(
+      "run_v1b_history",
+      HISTORY_ACTION_ID,
+      "indbase",
+      "indbase.doctor",
+      {
+        interaction_id: "ix_history",
+        title: "Confirm",
+        message: "Proceed with doctor?"
+      },
+      "2026-05-23T10:00:04.000Z"
+    );
+    runtime.store.markInteractionResponded("run_v1b_history", "ix_history", "yes");
+
+    const trace = runtime.getActionTrace(HISTORY_ACTION_ID);
+    const { lastFrame, unmount } = render(
+      <App
+        runtime={runtime}
+        initialManifest={indbaseManifestFixture}
+        testTraceView={{ trace }}
+      />
+    );
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Interactions (1)");
+        expect(frame).toContain("ix_history");
+        expect(frame).toContain("Proceed with doctor?");
+        expect(frame).toContain('"yes"');
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
   it("renders full trace payload on JSON tab", async () => {
     const trace = runtime.getActionTrace(HISTORY_ACTION_ID);
     const { lastFrame, unmount } = render(

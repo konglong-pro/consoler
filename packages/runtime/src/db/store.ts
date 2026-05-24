@@ -9,13 +9,30 @@ import type {
   AgentManifest,
   ApprovalToken,
   ContextSnapshot,
+  InteractionRequest,
   RegistryAgentEntry
 } from "@consoler/protocol";
+import type { InteractionTraceStatus } from "../action-read-types.js";
 import { hashCanonical } from "@consoler/protocol";
 
 import { databasePath } from "../paths.js";
 import { HISTORY_INDEXES_SQL } from "./indexes.js";
 import { SCHEMA_SQL } from "./schema.js";
+
+export interface StoredInteraction {
+  id: number;
+  run_id: string;
+  action_id: string;
+  agent_id: string;
+  command: string;
+  interaction_id: string;
+  request_json: string;
+  response_json: string | null;
+  status: InteractionTraceStatus;
+  requested_at: string;
+  responded_at: string | null;
+  closed_at: string | null;
+}
 
 export interface StoredEvent {
   id: number;
@@ -436,5 +453,73 @@ export class ConsolerStore {
       latest_run_id: string | null;
       latest_run_status: string | null;
     }>;
+  }
+
+  insertPendingInteraction(
+    runId: string,
+    actionId: string,
+    agentId: string,
+    command: string,
+    request: InteractionRequest,
+    requestedAt: string
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO interactions (
+          run_id, action_id, agent_id, command, interaction_id,
+          request_json, response_json, status, requested_at, responded_at, closed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, 'pending', ?, NULL, NULL)`
+      )
+      .run(
+        runId,
+        actionId,
+        agentId,
+        command,
+        request.interaction_id,
+        JSON.stringify(request),
+        requestedAt
+      );
+  }
+
+  markInteractionResponded(runId: string, interactionId: string, response: unknown): void {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE interactions
+         SET status = 'responded', response_json = ?, responded_at = ?, closed_at = ?
+         WHERE run_id = ? AND interaction_id = ? AND status = 'pending'`
+      )
+      .run(JSON.stringify(response), now, now, runId, interactionId);
+    if (result.changes === 0) {
+      throw new Error(`No pending interaction ${interactionId} for run ${runId}`);
+    }
+  }
+
+  abandonPendingInteractionsForRun(runId: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE interactions
+         SET status = 'abandoned', closed_at = ?
+         WHERE run_id = ? AND status = 'pending'`
+      )
+      .run(now, runId);
+  }
+
+  listInteractionsForAction(actionId: string): StoredInteraction[] {
+    return this.db
+      .prepare(
+        `SELECT id, run_id, action_id, agent_id, command, interaction_id, request_json,
+                response_json, status, requested_at, responded_at, closed_at
+         FROM interactions WHERE action_id = ? ORDER BY requested_at ASC, id ASC`
+      )
+      .all(actionId) as StoredInteraction[];
+  }
+
+  countInteractionsForAction(actionId: string): number {
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS count FROM interactions WHERE action_id = ?`)
+      .get(actionId) as { count: number } | undefined;
+    return row?.count ?? 0;
   }
 }

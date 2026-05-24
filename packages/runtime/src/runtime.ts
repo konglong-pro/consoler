@@ -239,6 +239,7 @@ export class ConsolerRuntime {
       const hasTerminal = acceptedEvents.some((event) => TERMINAL_EVENT_TYPES.has(event.type));
       if (!hasTerminal) return;
       settled = true;
+      this.store.abandonPendingInteractionsForRun(runId);
       pendingInteraction = null;
       const state = terminalStateFromEvents(acceptedEvents);
       handlers.onStateChange?.(state);
@@ -260,6 +261,14 @@ export class ConsolerRuntime {
         acceptedEvents.push(ingest.event);
         if (ingest.event.type === "interaction.required" && ingest.event.interaction) {
           pendingInteraction = ingest.event.interaction;
+          this.store.insertPendingInteraction(
+            runId,
+            prepared.action.action_id,
+            prepared.action.agent_id,
+            prepared.action.command,
+            ingest.event.interaction,
+            ingest.event.timestamp
+          );
         }
         handlers.onEvent?.(ingest.event, ingest);
         maybeFinish();
@@ -282,6 +291,8 @@ export class ConsolerRuntime {
         maybeFinish();
         if (!settled) {
           settled = true;
+          this.store.abandonPendingInteractionsForRun(runId);
+          pendingInteraction = null;
           const state = terminalStateFromEvents(acceptedEvents);
           handlers.onStateChange?.(state);
           resolveDone({ run_id: runId, state, events: [...acceptedEvents] });
@@ -290,6 +301,8 @@ export class ConsolerRuntime {
       .catch((error: unknown) => {
         if (!settled) {
           settled = true;
+          this.store.abandonPendingInteractionsForRun(runId);
+          pendingInteraction = null;
           rejectDone(error instanceof Error ? error : new Error(String(error)));
         }
       });
@@ -305,12 +318,13 @@ export class ConsolerRuntime {
         throw new Error(`Unknown interaction id: ${interactionId}`);
       }
       validateInteractionResponse(pendingInteraction, response);
-      const result = await execClient.request("action.respond_interaction", {
+      // Persist before RPC so a concurrent terminal event cannot abandon the row first.
+      this.store.markInteractionResponded(runId, interactionId, response);
+      pendingInteraction = null;
+      return execClient.request("action.respond_interaction", {
         interaction_id: interactionId,
         response
       });
-      pendingInteraction = null;
-      return result;
     };
 
     return {

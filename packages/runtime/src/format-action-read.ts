@@ -15,9 +15,9 @@ export function formatActionHistory(entries: ActionHistoryEntry[]): string {
       `  created=${entry.created_at}  events=${entry.accepted_event_count}/${entry.rejected_event_count} rejected`
     );
     lines.push(`  args: ${entry.args_summary}`);
-    if (entry.has_plan || entry.has_context || entry.has_approval) {
+    if (entry.has_plan || entry.has_context || entry.has_approval || entry.interaction_count > 0) {
       lines.push(
-        `  artifacts: plan=${entry.has_plan} context=${entry.has_context} approval=${entry.has_approval}`
+        `  artifacts: plan=${entry.has_plan} context=${entry.has_context} approval=${entry.has_approval} interactions=${entry.interaction_count}`
       );
     }
     lines.push("");
@@ -75,6 +75,27 @@ export function formatActionTrace(trace: ActionTrace): string {
     lines.push(`  [${event.seq}] ${event.type}${event.message ? `: ${event.message}` : ""}`);
   }
   lines.push("");
+
+  if (trace.interactions.length) {
+    lines.push(`Interactions (${trace.interactions.length}):`);
+    for (const interaction of trace.interactions) {
+      lines.push(
+        `  ${interaction.interaction_id} status=${interaction.status} title=${interaction.request.title}`
+      );
+      lines.push(`    message: ${interaction.request.message}`);
+      lines.push(`    requested_at=${interaction.requested_at}`);
+      if (interaction.responded_at) {
+        lines.push(`    responded_at=${interaction.responded_at}`);
+      }
+      if (interaction.closed_at) {
+        lines.push(`    closed_at=${interaction.closed_at}`);
+      }
+      if (interaction.response !== null) {
+        lines.push(`    response: ${JSON.stringify(interaction.response)}`);
+      }
+    }
+    lines.push("");
+  }
 
   lines.push(`Rejected events (${trace.rejected_events.length}):`);
   for (const rejected of trace.rejected_events) {

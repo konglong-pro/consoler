@@ -4,8 +4,11 @@ import type {
   ActionPlan,
   ApprovalToken,
   ContextSnapshot,
+  InteractionRequest,
   RenderableBlock
 } from "@consoler/protocol";
+
+export type InteractionTraceStatus = "pending" | "responded" | "abandoned";
 
 export type ActionHistoryStatus = "prepared" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -30,6 +33,18 @@ export interface ActionHistoryEntry {
   has_context: boolean;
   has_approval: boolean;
   terminal_state: ActionHistoryStatus | null;
+  interaction_count: number;
+}
+
+export interface InteractionTraceRecord {
+  run_id: string;
+  interaction_id: string;
+  status: InteractionTraceStatus;
+  request: InteractionRequest;
+  response: unknown | null;
+  requested_at: string;
+  responded_at: string | null;
+  closed_at: string | null;
 }
 
 export interface ActionRunSummary {
@@ -65,4 +80,5 @@ export interface ActionTrace {
   result_blocks: RenderableBlock[];
   terminal_state: ActionHistoryStatus | null;
   latest_run_id: string | null;
+  interactions: InteractionTraceRecord[];
 }

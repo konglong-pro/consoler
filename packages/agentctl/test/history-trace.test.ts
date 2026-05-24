@@ -84,4 +84,29 @@ describe("agentctl history and trace formatting", () => {
     expect(json.rejected_events.length).toBe(1);
     expect(json.action.action_id).toBe("act_cli_test");
   });
+
+  it("trace includes persisted interaction request and response", () => {
+    runtime.store.insertPendingInteraction(
+      "run_cli_test",
+      "act_cli_test",
+      "indbase",
+      "indbase.doctor",
+      {
+        interaction_id: "ix_cli",
+        title: "Confirm",
+        message: "Run doctor?"
+      },
+      "2026-05-01T12:00:03.000Z"
+    );
+    runtime.store.markInteractionResponded("run_cli_test", "ix_cli", { ok: true });
+
+    const text = formatActionTrace(runtime.getActionTrace("act_cli_test"));
+    expect(text).toContain("Interactions (1)");
+    expect(text).toContain("ix_cli");
+    expect(text).toContain('"ok":true');
+
+    const json = runtime.getActionTrace("act_cli_test");
+    expect(json.interactions).toHaveLength(1);
+    expect(json.interactions[0]?.response).toEqual({ ok: true });
+  });
 });

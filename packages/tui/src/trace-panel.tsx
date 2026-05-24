@@ -54,6 +54,24 @@ export function TracePanel({ trace }: { trace: ActionTrace }) {
         </Box>
       ) : null}
 
+      {trace.interactions.length ? (
+        <Box marginTop={1} flexDirection="column">
+          <Text bold>Interactions ({trace.interactions.length})</Text>
+          {trace.interactions.map((interaction) => (
+            <Box key={`${interaction.run_id}-${interaction.interaction_id}`} flexDirection="column" marginBottom={1}>
+              <Text>
+                {interaction.interaction_id} — {interaction.status}
+              </Text>
+              <Text dimColor>{interaction.request.title}</Text>
+              <Text>{interaction.request.message}</Text>
+              {interaction.response !== null ? (
+                <Text>response: {JSON.stringify(interaction.response)}</Text>
+              ) : null}
+            </Box>
+          ))}
+        </Box>
+      ) : null}
+
       <Box marginTop={1} flexDirection="column">
         <Text bold>Accepted events ({trace.accepted_events.length})</Text>
         {trace.accepted_events.map((event) => (

@@ -85,4 +85,20 @@ CREATE TABLE IF NOT EXISTS plans (
   plan_hash TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS interactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  command TEXT NOT NULL,
+  interaction_id TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  response_json TEXT,
+  status TEXT NOT NULL,
+  requested_at TEXT NOT NULL,
+  responded_at TEXT,
+  closed_at TEXT,
+  UNIQUE(run_id, interaction_id)
+);
 `;

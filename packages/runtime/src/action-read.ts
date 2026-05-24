@@ -1,14 +1,17 @@
 import type { ActionEvent, RenderableBlock } from "@consoler/protocol";
 
+import type { InteractionRequest } from "@consoler/protocol";
+
 import type {
   ActionHistoryEntry,
   ActionHistoryStatus,
   ActionRunSummary,
   ActionTrace,
+  InteractionTraceRecord,
   ListActionHistoryOptions,
   RejectedEventRecord
 } from "./action-read-types.js";
-import type { ConsolerStore, StoredEvent } from "./db/store.js";
+import type { ConsolerStore, StoredEvent, StoredInteraction } from "./db/store.js";
 import { replayAction } from "./replay.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
@@ -68,6 +71,20 @@ function storedEventToActionEvent(row: StoredEvent): ActionEvent | null {
   }
 }
 
+function toInteractionTraceRecord(row: StoredInteraction): InteractionTraceRecord {
+  const request = JSON.parse(row.request_json) as InteractionRequest;
+  return {
+    run_id: row.run_id,
+    interaction_id: row.interaction_id,
+    status: row.status,
+    request,
+    response: row.response_json ? (JSON.parse(row.response_json) as unknown) : null,
+    requested_at: row.requested_at,
+    responded_at: row.responded_at,
+    closed_at: row.closed_at
+  };
+}
+
 function toRejectedRecord(row: StoredEvent): RejectedEventRecord {
   return {
     id: row.id,
@@ -116,7 +133,8 @@ export function listActionHistory(
       has_plan: store.hasPlan(row.action_id),
       has_context: store.hasContext(row.action_id),
       has_approval: store.hasApproval(row.action_id),
-      terminal_state: terminalState
+      terminal_state: terminalState,
+      interaction_count: store.countInteractionsForAction(row.action_id)
     });
 
     if (entries.length >= limit) break;
@@ -172,6 +190,7 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
     rejected_events,
     result_blocks: resultBlocksFromEvents(accepted_events),
     terminal_state,
-    latest_run_id: timeline.run_id
+    latest_run_id: timeline.run_id,
+    interactions: store.listInteractionsForAction(actionId).map(toInteractionTraceRecord)
   };
 }
