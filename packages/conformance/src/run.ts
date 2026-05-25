@@ -759,12 +759,17 @@ async function runCancelExecuteChecks(
   const quarantined = trace.rejected_events.filter(
     (row) => row.reject_reason === "cancel_requested"
   );
+  const unexpectedRejected = trace.rejected_events.filter(
+    (row) => row.reject_reason !== "cancel_requested"
+  );
   checks.push(
     check(
       "cancel.quarantine",
-      "Post-cancel events quarantined",
-      quarantined.length > 0 ? "passed" : "failed",
-      `${quarantined.length} rejected with cancel_requested`
+      "Post-cancel quarantine",
+      unexpectedRejected.length === 0 ? "passed" : "failed",
+      quarantined.length > 0
+        ? `${quarantined.length} rejected with cancel_requested`
+        : "no post-cancel events before action.cancelled"
     )
   );
 
@@ -1292,8 +1297,9 @@ export async function runAgentConformance(
         )
       );
     }
-  } catch {
-    // base checks already recorded failure rows
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("conformance.harness", "Harness", "failed", message));
   } finally {
     runtime.store.db.close();
   }
