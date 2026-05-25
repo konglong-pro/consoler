@@ -25,6 +25,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Test all: `pnpm test`
 - Conformance harness: `pnpm test:conformance`
 - Compiled agentctl smoke: `pnpm test:agentctl-smoke` (after `pnpm build`)
+- V1l redaction smoke: `pnpm test:redaction-smoke` (after `pnpm build`)
 - Python SDK tests: `pnpm test:python-sdk`
 - Single package test: `pnpm --filter @consoler/protocol test`
 - TUI package test: `pnpm --filter @consoler/tui test`
@@ -61,6 +62,8 @@ Prefer narrow validation for the changed package before broad checks.
 - V1h `interaction.required`: start in `docs/planning/v1h-interaction-required.md`; fake-first runtime/SDK/agentctl/TUI interaction loop with one pending interaction and no timeout or response persistence.
 - V1i interaction trace persistence: start in `docs/planning/v1i-interaction-trace-persistence.md`; persist interaction request/response records for trace without changing replay.
 - V1j agentctl run live interactions: start in `docs/planning/v1j-agentctl-run-live-interactions.md`; wire live `interaction.required` handling into `agentctl run` without protocol, SDK, TUI, or real indbase changes.
+- V1k interaction timeout policy: start in `docs/planning/v1k-interaction-timeout-policy.md`; add runtime-owned timeout policy for `interaction.required` without real indbase, redaction, multi-pending, strong epoch, or force-kill changes.
+- V1l interaction response redaction: start in `docs/planning/v1l-interaction-response-redaction.md`; add opt-in trace persistence redaction for top-level object fields without real indbase or retroactive database rewrites.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -155,6 +158,22 @@ Prefer narrow validation for the changed package before broad checks.
   5. Do not change protocol, Python SDK, TUI, real `E:\indbase`, timeout, redaction, multi-pending, strong epoch, or force-kill behavior.
   6. Run focused agentctl/runtime checks, root conformance, Python SDK, typecheck, build, root test, and an isolated conformance fake `agentctl run` smoke.
 
+- Interaction timeout policy change:
+  1. Read `docs/planning/v1k-interaction-timeout-policy.md`.
+  2. Runtime owns timeout timers; clients display policy but do not enforce timeout.
+  3. Support `abort`, `use_default`, `skip`, and `continue`; `abort` must become `action.failed`, not `action.cancelled`.
+  4. Keep `skip` and `continue` as agent-visible timeout result dicts; keep replay response-free.
+  5. Do not edit `E:\indbase` or add redaction, multi-pending, `system.*`, strong epoch, or force-kill behavior.
+  6. Run focused protocol/runtime/conformance/agentctl/TUI/Python SDK checks, root conformance, agentctl smoke, typecheck, build, and root test.
+
+- Interaction response redaction change:
+  1. Read `docs/planning/v1l-interaction-response-redaction.md`.
+  2. Keep redaction opt-in through top-level `prompt_schema` property markers only.
+  3. Redact persisted trace data, not the live response sent to the agent.
+  4. Do not rewrite existing interaction rows or add request-level policy, nested traversal, real `E:\indbase`, `system.*`, multi-pending, strong epoch, or force-kill behavior.
+  5. Verify trace JSON/text/TUI show redacted values plus `redacted_paths`, while replay remains response-free; result blocks must not echo secret plaintext.
+  6. Run focused protocol/runtime/conformance/agentctl/TUI/Python SDK checks, root conformance, `pnpm test:redaction-smoke`, agentctl smoke, typecheck, build, and root test.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -179,6 +198,8 @@ Prefer narrow validation for the changed package before broad checks.
 - V1h interactions are live transport responses only: persist `interaction.required` as an event, but do not persist user responses unless a newer planning doc changes scope.
 - V1i persists interaction responses for trace/debugging only; replay must remain accepted-events-only.
 - V1j makes `agentctl run` a live interaction client, but the runtime still owns interaction validation, response routing, persistence, and terminal state.
+- V1k interaction timeouts are runtime-owned; timeout abort is an action failure, while skip/continue are explicit agent-visible timeout results.
+- V1l interaction redaction protects persisted trace/history data only; it must not change the live response delivered to the agent process.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -204,6 +225,8 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1h-interaction-required.md`: fake-first running interaction loop execution brief.
 - `docs/planning/v1i-interaction-trace-persistence.md`: interaction request/response trace persistence brief.
 - `docs/planning/v1j-agentctl-run-live-interactions.md`: `agentctl run` live interaction execution brief.
+- `docs/planning/v1k-interaction-timeout-policy.md`: runtime-owned interaction timeout policy brief.
+- `docs/planning/v1l-interaction-response-redaction.md`: opt-in persisted interaction response redaction brief.
 
 ## Done Means
 

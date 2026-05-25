@@ -8,7 +8,7 @@ import type {
   RenderableBlock
 } from "@consoler/protocol";
 
-export type InteractionTraceStatus = "pending" | "responded" | "abandoned";
+export type InteractionTraceStatus = "pending" | "responded" | "abandoned" | "timed_out";
 
 export type ActionHistoryStatus = "prepared" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -45,6 +45,9 @@ export interface InteractionTraceRecord {
   requested_at: string;
   responded_at: string | null;
   closed_at: string | null;
+  timeout_triggered_at: string | null;
+  timeout_outcome: string | null;
+  redacted_paths: string[];
 }
 
 export interface ActionRunSummary {

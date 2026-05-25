@@ -17,7 +17,17 @@ import { hashCanonical } from "@consoler/protocol";
 
 import { databasePath } from "../paths.js";
 import { HISTORY_INDEXES_SQL } from "./indexes.js";
-import { SCHEMA_SQL } from "./schema.js";
+import {
+  mergeRedactedPaths,
+  parseRedactedPathsJson,
+  redactInteractionRequest,
+  redactInteractionResponse
+} from "../interaction-redaction.js";
+import {
+  INTERACTIONS_MIGRATION_SQL,
+  INTERACTIONS_REDACTION_MIGRATION_SQL,
+  SCHEMA_SQL
+} from "./schema.js";
 
 export interface StoredInteraction {
   id: number;
@@ -32,6 +42,9 @@ export interface StoredInteraction {
   requested_at: string;
   responded_at: string | null;
   closed_at: string | null;
+  timeout_triggered_at: string | null;
+  timeout_outcome: string | null;
+  redacted_paths_json: string | null;
 }
 
 export interface StoredEvent {
@@ -61,6 +74,39 @@ export class ConsolerStore {
     this.db.pragma("journal_mode = WAL");
     this.db.exec(SCHEMA_SQL);
     this.db.exec(HISTORY_INDEXES_SQL);
+    this.migrateInteractionsTable();
+  }
+
+  private migrateInteractionsTable(): void {
+    this.applyInteractionColumnMigrations(INTERACTIONS_MIGRATION_SQL, [
+      "timeout_triggered_at",
+      "timeout_outcome"
+    ]);
+    this.applyInteractionColumnMigrations(INTERACTIONS_REDACTION_MIGRATION_SQL, [
+      "redacted_paths_json"
+    ]);
+  }
+
+  private applyInteractionColumnMigrations(sql: string, requiredColumns: string[]): void {
+    const columns = this.db.prepare(`PRAGMA table_info(interactions)`).all() as Array<{
+      name: string;
+    }>;
+    const names = new Set(columns.map((column) => column.name));
+    if (requiredColumns.every((column) => names.has(column))) {
+      return;
+    }
+    for (const statement of sql.split(";").map((line) => line.trim())) {
+      if (!statement) continue;
+      const column = statement.match(/ADD COLUMN (\w+)/)?.[1];
+      if (column && names.has(column)) {
+        continue;
+      }
+      try {
+        this.db.exec(statement);
+      } catch {
+        // Column may already exist from a partial migration.
+      }
+    }
   }
 
   upsertRegistryAgent(entry: RegistryAgentEntry): void {
@@ -463,12 +509,14 @@ export class ConsolerStore {
     request: InteractionRequest,
     requestedAt: string
   ): void {
+    const { request: persistedRequest, redactedPaths } = redactInteractionRequest(request);
     this.db
       .prepare(
         `INSERT INTO interactions (
           run_id, action_id, agent_id, command, interaction_id,
-          request_json, response_json, status, requested_at, responded_at, closed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, NULL, 'pending', ?, NULL, NULL)`
+          request_json, response_json, status, requested_at, responded_at, closed_at,
+          redacted_paths_json
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, 'pending', ?, NULL, NULL, ?)`
       )
       .run(
         runId,
@@ -476,20 +524,83 @@ export class ConsolerStore {
         agentId,
         command,
         request.interaction_id,
-        JSON.stringify(request),
-        requestedAt
+        JSON.stringify(persistedRequest),
+        requestedAt,
+        redactedPaths.length ? JSON.stringify(redactedPaths) : null
       );
   }
 
-  markInteractionResponded(runId: string, interactionId: string, response: unknown): void {
+  markInteractionResponded(
+    runId: string,
+    interactionId: string,
+    response: unknown,
+    timeout?: { triggered_at: string; outcome: string }
+  ): void {
+    const row = this.db
+      .prepare(
+        `SELECT request_json, redacted_paths_json
+         FROM interactions
+         WHERE run_id = ? AND interaction_id = ? AND status = 'pending'`
+      )
+      .get(runId, interactionId) as
+      | { request_json: string; redacted_paths_json: string | null }
+      | undefined;
+    if (!row) {
+      throw new Error(`No pending interaction ${interactionId} for run ${runId}`);
+    }
+    const request = JSON.parse(row.request_json) as InteractionRequest;
+    const { response: persistedResponse, redactedPaths: responsePaths } =
+      redactInteractionResponse(request, response);
+    const redactedPaths = mergeRedactedPaths(
+      parseRedactedPathsJson(row.redacted_paths_json),
+      responsePaths
+    );
     const now = new Date().toISOString();
     const result = this.db
       .prepare(
         `UPDATE interactions
-         SET status = 'responded', response_json = ?, responded_at = ?, closed_at = ?
+         SET status = 'responded',
+             response_json = ?,
+             responded_at = ?,
+             closed_at = ?,
+             timeout_triggered_at = ?,
+             timeout_outcome = ?,
+             redacted_paths_json = ?
          WHERE run_id = ? AND interaction_id = ? AND status = 'pending'`
       )
-      .run(JSON.stringify(response), now, now, runId, interactionId);
+      .run(
+        JSON.stringify(persistedResponse),
+        now,
+        now,
+        timeout?.triggered_at ?? null,
+        timeout?.outcome ?? null,
+        redactedPaths.length ? JSON.stringify(redactedPaths) : null,
+        runId,
+        interactionId
+      );
+    if (result.changes === 0) {
+      throw new Error(`No pending interaction ${interactionId} for run ${runId}`);
+    }
+  }
+
+  markInteractionTimedOut(
+    runId: string,
+    interactionId: string,
+    timeout: { triggered_at: string; outcome: string }
+  ): void {
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE interactions
+         SET status = 'timed_out',
+             response_json = NULL,
+             responded_at = NULL,
+             closed_at = ?,
+             timeout_triggered_at = ?,
+             timeout_outcome = ?
+         WHERE run_id = ? AND interaction_id = ? AND status = 'pending'`
+      )
+      .run(now, timeout.triggered_at, timeout.outcome, runId, interactionId);
     if (result.changes === 0) {
       throw new Error(`No pending interaction ${interactionId} for run ${runId}`);
     }
@@ -510,7 +621,8 @@ export class ConsolerStore {
     return this.db
       .prepare(
         `SELECT id, run_id, action_id, agent_id, command, interaction_id, request_json,
-                response_json, status, requested_at, responded_at, closed_at
+                response_json, status, requested_at, responded_at, closed_at,
+                timeout_triggered_at, timeout_outcome, redacted_paths_json
          FROM interactions WHERE action_id = ? ORDER BY requested_at ASC, id ASC`
       )
       .all(actionId) as StoredInteraction[];

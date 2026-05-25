@@ -82,7 +82,11 @@ A structured prompt an agent emits during execution as an `interaction.required`
 
 ## Interaction Response
 
-The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1i persists the full response JSON in the `interactions` table for trace and history debugging. Replay remains accepted agent events only and does not include interaction responses.
+The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1i persists response JSON in the `interactions` table for trace and history debugging. V1l may redact marked top-level object fields in persisted trace data and stored `interaction.required` payloads while the live agent still receives the full response. Replay remains accepted agent events only and does not include interaction responses.
+
+## Interaction Redaction
+
+Opt-in trace persistence protection for object-schema interactions. Agents mark top-level `prompt_schema.properties.<field>` with `x-consoler-redact: true`; the runtime replaces those field values with `"[REDACTED]"` in SQLite and records JSON Pointer paths in `redacted_paths`. Redaction does not change the live `action.respond_interaction` payload.
 
 ## Pending Interaction
 

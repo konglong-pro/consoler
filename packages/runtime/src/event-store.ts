@@ -4,6 +4,8 @@ import {
   type ActionEvent
 } from "@consoler/protocol";
 
+import { redactInteractionRequiredEvent } from "./interaction-redaction.js";
+import { validateInteractionTimeoutPolicy } from "./interaction-timeout.js";
 import type { ConsolerStore, StoredEvent } from "./db/store.js";
 
 export type EventRejectReason =
@@ -53,6 +55,12 @@ export class EventStore {
     }
 
     const event = validated.value!;
+    if (event.type === "interaction.required" && event.interaction) {
+      const timeoutError = validateInteractionTimeoutPolicy(event.interaction);
+      if (timeoutError) {
+        return this.reject(event, "schema_invalid", now);
+      }
+    }
     if (event.run_id !== runId) {
       return this.reject(event, "wrong_run", now);
     }
@@ -70,6 +78,10 @@ export class EventStore {
       return this.reject(event, "duplicate_seq", now);
     }
 
+    const persistedEvent =
+      event.type === "interaction.required"
+        ? redactInteractionRequiredEvent(event)
+        : event;
     this.store.insertEvent({
       id: 0,
       event_id: event.event_id,
@@ -81,7 +93,7 @@ export class EventStore {
       seq: event.seq,
       epoch: event.epoch,
       timestamp: event.timestamp,
-      payload_json: JSON.stringify(event),
+      payload_json: JSON.stringify(persistedEvent),
       accepted: 1,
       reject_reason: null,
       created_at: now

@@ -90,6 +90,20 @@ export function formatActionTrace(trace: ActionTrace): string {
       if (interaction.closed_at) {
         lines.push(`    closed_at=${interaction.closed_at}`);
       }
+      if (interaction.request.timeout_policy) {
+        const policy = interaction.request.timeout_policy;
+        lines.push(
+          `    timeout_policy: ${policy.timeout_seconds}s on_timeout=${policy.on_timeout}`
+        );
+      }
+      if (interaction.timeout_triggered_at) {
+        lines.push(
+          `    timeout_triggered_at=${interaction.timeout_triggered_at} outcome=${interaction.timeout_outcome ?? "-"}`
+        );
+      }
+      if (interaction.redacted_paths.length) {
+        lines.push(`    redacted_paths: ${JSON.stringify(interaction.redacted_paths)}`);
+      }
       if (interaction.response !== null) {
         lines.push(`    response: ${JSON.stringify(interaction.response)}`);
       }

@@ -8,14 +8,18 @@ import {
   type AgentManifest
 } from "@consoler/protocol";
 
+import { createHash } from "node:crypto";
+
 import {
   ConsolerRuntime,
+  formatActionTrace,
   formatReplayTimeline,
   getCommandDef,
   getEnabledAgent,
   isProbeReadonlyPreview,
   JsonRpcAgentClient,
   loadRegistry,
+  REDACTED_SENTINEL,
   replayAction,
   type PreparedExecutionControl
 } from "@consoler/runtime";
@@ -32,6 +36,16 @@ const INTERACTIVE_COMMANDS = new Set([
   "conformance.interactive_choice",
   "conformance.interactive_form"
 ]);
+
+const TIMEOUT_COMMANDS = new Set(["conformance.interactive_timeout"]);
+
+const REDACTION_COMMANDS = new Set(["conformance.interactive_redaction"]);
+
+const REDACTION_DEFAULT_SECRET = "default-secret";
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function check(
   id: string,
@@ -322,6 +336,35 @@ async function runCommandChecks(
     return checks;
   }
 
+  if (TIMEOUT_COMMANDS.has(command)) {
+    if (!options.approve) {
+      checks.push(check("command.execute", "Execute", "skipped", "Pass --approve to execute"));
+      return checks;
+    }
+    return [...checks, ...(await runTimeoutExecuteChecks(runtime, prepared))];
+  }
+
+  if (REDACTION_COMMANDS.has(command)) {
+    if (options.interactionResponse === undefined) {
+      checks.push(
+        check(
+          "interaction.response_required",
+          "Interaction response",
+          "failed",
+          "Pass --interaction-response <path> for redaction conformance"
+        )
+      );
+      checks.push(
+        check("command.execute", "Execute", "skipped", "Missing interaction response")
+      );
+      return checks;
+    }
+    return [
+      ...checks,
+      ...(await runRedactionExecuteChecks(runtime, prepared, options.interactionResponse))
+    ];
+  }
+
   if (INTERACTIVE_COMMANDS.has(command)) {
     if (options.interactionResponse === undefined) {
       checks.push(
@@ -434,6 +477,160 @@ async function runInteractiveExecuteChecks(
       "Succeeded terminal state",
       succeeded ? "passed" : "failed",
       `terminal=${terminal.state}`
+    )
+  );
+
+  return checks;
+}
+
+async function runRedactionExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>,
+  interactionResponse: unknown
+): Promise<ConformanceCheck[]> {
+  const checks = await runInteractiveExecuteChecks(runtime, prepared, interactionResponse);
+  const execute = checks.find((row) => row.id === "command.execute");
+  if (!execute || execute.status !== "passed") {
+    return checks;
+  }
+
+  const responseRecord =
+    typeof interactionResponse === "object" &&
+    interactionResponse !== null &&
+    !Array.isArray(interactionResponse)
+      ? (interactionResponse as Record<string, unknown>)
+      : null;
+  const expectedSecret =
+    responseRecord && typeof responseRecord.api_key === "string"
+      ? responseRecord.api_key
+      : null;
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  const interaction = trace.interactions[0];
+  const traceJson = JSON.stringify(trace);
+  const traceText = formatActionTrace(trace);
+  const replay = runtime.getReplay(actionId);
+  const replayJson = JSON.stringify(replay);
+  const bannedSecrets = [
+    expectedSecret,
+    REDACTION_DEFAULT_SECRET
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  checks.push(
+    check(
+      "interaction.redaction_trace_row",
+      "Interaction trace row",
+      interaction ? "passed" : "failed",
+      interaction ? "interaction trace present" : "Missing interaction trace row"
+    )
+  );
+
+  const responseApiKey =
+    interaction?.response &&
+    typeof interaction.response === "object" &&
+    interaction.response !== null &&
+    !Array.isArray(interaction.response)
+      ? (interaction.response as Record<string, unknown>).api_key
+      : undefined;
+  checks.push(
+    check(
+      "interaction.redaction_response",
+      "Persisted response redacted",
+      responseApiKey === REDACTED_SENTINEL ? "passed" : "failed",
+      `api_key=${String(responseApiKey)}`
+    )
+  );
+
+  checks.push(
+    check(
+      "interaction.redaction_paths",
+      "Redacted paths recorded",
+      interaction?.redacted_paths.includes("/api_key") ? "passed" : "failed",
+      `paths=${JSON.stringify(interaction?.redacted_paths ?? [])}`
+    )
+  );
+
+  for (const secret of bannedSecrets) {
+    const label = secret === expectedSecret ? "live secret" : "default secret";
+    checks.push(
+      check(
+        `interaction.redaction_secret_absent.trace_json.${secret === expectedSecret ? "live" : "default"}`,
+        `${label} absent from trace JSON`,
+        !traceJson.includes(secret) ? "passed" : "failed",
+        "trace --json must not include the original secret"
+      )
+    );
+    checks.push(
+      check(
+        `interaction.redaction_secret_absent.trace_text.${secret === expectedSecret ? "live" : "default"}`,
+        `${label} absent from text trace`,
+        !traceText.includes(secret) ? "passed" : "failed",
+        "Text trace must not include the original secret"
+      )
+    );
+    checks.push(
+      check(
+        `interaction.redaction_secret_absent.replay.${secret === expectedSecret ? "live" : "default"}`,
+        `${label} absent from replay`,
+        !replayJson.includes(secret) ? "passed" : "failed",
+        "Replay must not include the original secret"
+      )
+    );
+  }
+
+  const defaultApiKey =
+    interaction?.request.default_response &&
+    typeof interaction.request.default_response === "object" &&
+    interaction.request.default_response !== null &&
+    !Array.isArray(interaction.request.default_response)
+      ? (interaction.request.default_response as Record<string, unknown>).api_key
+      : undefined;
+  checks.push(
+    check(
+      "interaction.redaction_default",
+      "Persisted default_response redacted",
+      defaultApiKey === REDACTED_SENTINEL ? "passed" : "failed",
+      `default api_key=${String(defaultApiKey)}`
+    )
+  );
+
+  const proof = trace.result_blocks.find(
+    (block) =>
+      block.type === "json" &&
+      typeof block.content === "object" &&
+      block.content !== null &&
+      "api_key_sha256" in (block.content as Record<string, unknown>)
+  );
+  const proofContent =
+    proof &&
+    typeof proof.content === "object" &&
+    proof.content !== null &&
+    !Array.isArray(proof.content)
+      ? (proof.content as Record<string, unknown>)
+      : undefined;
+  const receivedSecret = proofContent?.received_secret === true;
+  const proofHash =
+    typeof proofContent?.api_key_sha256 === "string" ? proofContent.api_key_sha256 : undefined;
+  const expectedHash = expectedSecret ? sha256Hex(expectedSecret) : null;
+  checks.push(
+    check(
+      "interaction.redaction_agent_live",
+      "Agent received live secret",
+      expectedHash && receivedSecret && proofHash === expectedHash ? "passed" : "failed",
+      `received_secret=${String(receivedSecret)} hash_match=${proofHash === expectedHash}`
+    )
+  );
+
+  const replayHasInteractionResponse = replay.events.some(
+    (event) => (event.type as string) === "interaction.response"
+  );
+  checks.push(
+    check(
+      "interaction.redaction_replay",
+      "Replay remains response-free",
+      !replayHasInteractionResponse ? "passed" : "failed",
+      "Replay must not include interaction.response events"
     )
   );
 
@@ -570,6 +767,102 @@ async function runCancelExecuteChecks(
       "Replay accepted-only",
       replay.events.length === trace.accepted_events.length ? "passed" : "failed",
       `replay=${replay.events.length} trace=${trace.accepted_events.length}`
+    )
+  );
+
+  return checks;
+}
+
+async function runTimeoutExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>
+): Promise<ConformanceCheck[]> {
+  const checks: ConformanceCheck[] = [];
+  const accepted: ActionEvent[] = [];
+  const mode = String(prepared.action.args["mode"] ?? "abort");
+
+  try {
+    const terminal = await runtime.executePrepared(prepared, {
+      onEvent: (event) => {
+        accepted.push(event);
+      }
+    });
+    checks.push(
+      check("command.execute", "Execute", "passed", `terminal=${terminal.state}`)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    return checks;
+  }
+
+  const hasInteraction = accepted.some((event) => event.type === "interaction.required");
+  checks.push(
+    check(
+      "interaction.required_event",
+      "interaction.required event",
+      hasInteraction ? "passed" : "failed",
+      hasInteraction ? "interaction.required present" : "Missing interaction.required"
+    )
+  );
+
+  const expectedTerminal = mode === "abort" ? "action.failed" : "action.succeeded";
+  const hasTerminal = accepted.some((event) => event.type === expectedTerminal);
+  checks.push(
+    check(
+      "interaction.timeout_terminal",
+      "Timeout terminal event",
+      hasTerminal ? "passed" : "failed",
+      hasTerminal ? expectedTerminal : `Missing ${expectedTerminal}`
+    )
+  );
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  const interaction = trace.interactions[0];
+  checks.push(
+    check(
+      "interaction.timeout_trace",
+      "Timeout trace metadata",
+      interaction?.timeout_triggered_at ? "passed" : "failed",
+      interaction
+        ? `status=${interaction.status} outcome=${interaction.timeout_outcome ?? "none"}`
+        : "No interaction trace row"
+    )
+  );
+
+  if (mode === "abort") {
+    checks.push(
+      check(
+        "interaction.timeout_abort_status",
+        "Abort timeout status",
+        interaction?.status === "timed_out" ? "passed" : "failed",
+        `status=${interaction?.status ?? "none"}`
+      )
+    );
+  } else {
+    checks.push(
+      check(
+        "interaction.timeout_response",
+        "Timeout routed response",
+        interaction?.status === "responded" && interaction.response !== null ? "passed" : "failed",
+        `status=${interaction?.status ?? "none"}`
+      )
+    );
+  }
+
+  const replay = runtime.getReplay(actionId);
+  const replayHasInteractionResponse = replay.events.some(
+    (event) => (event.type as string) === "interaction.response"
+  );
+  checks.push(
+    check(
+      "interaction.timeout_replay",
+      "Replay remains response-free",
+      !replayHasInteractionResponse ? "passed" : "failed",
+      replayHasInteractionResponse
+        ? "Replay must not include interaction.response events"
+        : "No interaction.response events in replay"
     )
   );
 

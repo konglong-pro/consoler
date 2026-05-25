@@ -292,6 +292,30 @@ def test_jsonrpc_respond_interaction_while_execute():
     assert server._execute_busy() is False
 
 
+def test_interaction_timeout_abort_response():
+    published: list[dict] = []
+    emitter = EventEmitter("run_1", "act_1", "echo", "echo.ping", published.append)
+    helper = InteractionHelper(emitter)
+    helper._pending_id = "ix_timeout"
+    helper.respond("ix_timeout", {"timed_out": True, "action": "abort"})
+    with helper._condition:
+        assert helper._error is not None
+        assert helper._error.code == "interaction.timeout"
+
+
+def test_interaction_timeout_skip_and_continue_results():
+    published: list[dict] = []
+    emitter = EventEmitter("run_1", "act_1", "echo", "echo.ping", published.append)
+    helper = InteractionHelper(emitter)
+
+    helper._pending_id = "ix_skip"
+    assert helper.respond("ix_skip", {"timed_out": True, "action": "skip"}) == {"ok": True}
+
+    helper._pending_id = "ix_continue"
+    result = helper.respond("ix_continue", {"timed_out": True, "action": "continue"})
+    assert result == {"ok": True}
+
+
 def test_jsonrpc_discover_dispatch(monkeypatch):
     adapter = EchoAdapter()
 

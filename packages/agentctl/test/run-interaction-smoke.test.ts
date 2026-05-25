@@ -71,6 +71,42 @@ describe("agentctl run live interactions", () => {
     readRuntime.store.db.close();
   }, 60_000);
 
+  it("waits for runtime timeout on non-TTY when timeout_policy is set", async () => {
+    rootDir = createTempConformanceRoot({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry()
+    });
+    const runtime = new ConsolerRuntime({ rootDir });
+    try {
+      const result = await runApprovedWithInteractions(
+        runtime,
+        {
+          agentId: FAKE_AGENT_ID,
+          command: "conformance.interactive_timeout",
+          args: { message: "use_default", mode: "use_default" }
+        },
+        {
+          approve: true,
+          interactionPrompt: {
+            isTTY: false,
+            readLine: async () => "",
+            writeStderr: () => {},
+            takeSeededResponse: () => undefined
+          }
+        }
+      );
+
+      expect(result.run_id).toBeTruthy();
+      const trace = runtime.getActionTrace(result.action_id);
+      expect(trace.interactions).toHaveLength(1);
+      expect(trace.interactions[0]?.timeout_triggered_at).toBeTruthy();
+      expect(trace.interactions[0]?.timeout_outcome).toBe("use_default");
+      expect(trace.interactions[0]?.response).toEqual({ picked: true });
+    } finally {
+      runtime.store.db.close();
+    }
+  }, 60_000);
+
   it("fails fast without a seeded response when stdin is not a TTY", async () => {
     rootDir = createTempConformanceRoot({
       agentId: FAKE_AGENT_ID,
