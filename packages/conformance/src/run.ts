@@ -8,14 +8,18 @@ import {
   type AgentManifest
 } from "@consoler/protocol";
 
+import { createHash } from "node:crypto";
+
 import {
   ConsolerRuntime,
+  formatActionTrace,
   formatReplayTimeline,
   getCommandDef,
   getEnabledAgent,
   isProbeReadonlyPreview,
   JsonRpcAgentClient,
   loadRegistry,
+  REDACTED_SENTINEL,
   replayAction,
   type PreparedExecutionControl
 } from "@consoler/runtime";
@@ -32,6 +36,18 @@ const INTERACTIVE_COMMANDS = new Set([
   "conformance.interactive_choice",
   "conformance.interactive_form"
 ]);
+
+const TIMEOUT_COMMANDS = new Set(["conformance.interactive_timeout"]);
+
+const REDACTION_COMMANDS = new Set(["conformance.interactive_redaction"]);
+
+const IGNORE_CANCEL_COMMAND = "conformance.slow_ignore_cancel";
+
+const REDACTION_DEFAULT_SECRET = "default-secret";
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function check(
   id: string,
@@ -212,6 +228,7 @@ async function runCommandChecks(
     approvePreview?: boolean;
     approve?: boolean;
     cancelAfterMs?: number;
+    cancelTimeoutMs?: number;
     interactionResponse?: unknown;
   }
 ): Promise<ConformanceCheck[]> {
@@ -322,6 +339,35 @@ async function runCommandChecks(
     return checks;
   }
 
+  if (TIMEOUT_COMMANDS.has(command)) {
+    if (!options.approve) {
+      checks.push(check("command.execute", "Execute", "skipped", "Pass --approve to execute"));
+      return checks;
+    }
+    return [...checks, ...(await runTimeoutExecuteChecks(runtime, prepared))];
+  }
+
+  if (REDACTION_COMMANDS.has(command)) {
+    if (options.interactionResponse === undefined) {
+      checks.push(
+        check(
+          "interaction.response_required",
+          "Interaction response",
+          "failed",
+          "Pass --interaction-response <path> for redaction conformance"
+        )
+      );
+      checks.push(
+        check("command.execute", "Execute", "skipped", "Missing interaction response")
+      );
+      return checks;
+    }
+    return [
+      ...checks,
+      ...(await runRedactionExecuteChecks(runtime, prepared, options.interactionResponse))
+    ];
+  }
+
   if (INTERACTIVE_COMMANDS.has(command)) {
     if (options.interactionResponse === undefined) {
       checks.push(
@@ -344,6 +390,23 @@ async function runCommandChecks(
   }
 
   if (options.cancelAfterMs !== undefined) {
+    if (command === IGNORE_CANCEL_COMMAND) {
+      if (options.cancelTimeoutMs === undefined) {
+        checks.push(
+          check(
+            "command.cancel_timeout_mode",
+            "Cancel timeout mode",
+            "failed",
+            `${IGNORE_CANCEL_COMMAND} requires cancelTimeoutMs`
+          )
+        );
+        return checks;
+      }
+      return [
+        ...checks,
+        ...(await runCancelTimeoutExecuteChecks(runtime, prepared, options.cancelAfterMs))
+      ];
+    }
     return [...checks, ...(await runCancelExecuteChecks(runtime, prepared, options.cancelAfterMs))];
   }
 
@@ -434,6 +497,160 @@ async function runInteractiveExecuteChecks(
       "Succeeded terminal state",
       succeeded ? "passed" : "failed",
       `terminal=${terminal.state}`
+    )
+  );
+
+  return checks;
+}
+
+async function runRedactionExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>,
+  interactionResponse: unknown
+): Promise<ConformanceCheck[]> {
+  const checks = await runInteractiveExecuteChecks(runtime, prepared, interactionResponse);
+  const execute = checks.find((row) => row.id === "command.execute");
+  if (!execute || execute.status !== "passed") {
+    return checks;
+  }
+
+  const responseRecord =
+    typeof interactionResponse === "object" &&
+    interactionResponse !== null &&
+    !Array.isArray(interactionResponse)
+      ? (interactionResponse as Record<string, unknown>)
+      : null;
+  const expectedSecret =
+    responseRecord && typeof responseRecord.api_key === "string"
+      ? responseRecord.api_key
+      : null;
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  const interaction = trace.interactions[0];
+  const traceJson = JSON.stringify(trace);
+  const traceText = formatActionTrace(trace);
+  const replay = runtime.getReplay(actionId);
+  const replayJson = JSON.stringify(replay);
+  const bannedSecrets = [
+    expectedSecret,
+    REDACTION_DEFAULT_SECRET
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  checks.push(
+    check(
+      "interaction.redaction_trace_row",
+      "Interaction trace row",
+      interaction ? "passed" : "failed",
+      interaction ? "interaction trace present" : "Missing interaction trace row"
+    )
+  );
+
+  const responseApiKey =
+    interaction?.response &&
+    typeof interaction.response === "object" &&
+    interaction.response !== null &&
+    !Array.isArray(interaction.response)
+      ? (interaction.response as Record<string, unknown>).api_key
+      : undefined;
+  checks.push(
+    check(
+      "interaction.redaction_response",
+      "Persisted response redacted",
+      responseApiKey === REDACTED_SENTINEL ? "passed" : "failed",
+      `api_key=${String(responseApiKey)}`
+    )
+  );
+
+  checks.push(
+    check(
+      "interaction.redaction_paths",
+      "Redacted paths recorded",
+      interaction?.redacted_paths.includes("/api_key") ? "passed" : "failed",
+      `paths=${JSON.stringify(interaction?.redacted_paths ?? [])}`
+    )
+  );
+
+  for (const secret of bannedSecrets) {
+    const label = secret === expectedSecret ? "live secret" : "default secret";
+    checks.push(
+      check(
+        `interaction.redaction_secret_absent.trace_json.${secret === expectedSecret ? "live" : "default"}`,
+        `${label} absent from trace JSON`,
+        !traceJson.includes(secret) ? "passed" : "failed",
+        "trace --json must not include the original secret"
+      )
+    );
+    checks.push(
+      check(
+        `interaction.redaction_secret_absent.trace_text.${secret === expectedSecret ? "live" : "default"}`,
+        `${label} absent from text trace`,
+        !traceText.includes(secret) ? "passed" : "failed",
+        "Text trace must not include the original secret"
+      )
+    );
+    checks.push(
+      check(
+        `interaction.redaction_secret_absent.replay.${secret === expectedSecret ? "live" : "default"}`,
+        `${label} absent from replay`,
+        !replayJson.includes(secret) ? "passed" : "failed",
+        "Replay must not include the original secret"
+      )
+    );
+  }
+
+  const defaultApiKey =
+    interaction?.request.default_response &&
+    typeof interaction.request.default_response === "object" &&
+    interaction.request.default_response !== null &&
+    !Array.isArray(interaction.request.default_response)
+      ? (interaction.request.default_response as Record<string, unknown>).api_key
+      : undefined;
+  checks.push(
+    check(
+      "interaction.redaction_default",
+      "Persisted default_response redacted",
+      defaultApiKey === REDACTED_SENTINEL ? "passed" : "failed",
+      `default api_key=${String(defaultApiKey)}`
+    )
+  );
+
+  const proof = trace.result_blocks.find(
+    (block) =>
+      block.type === "json" &&
+      typeof block.content === "object" &&
+      block.content !== null &&
+      "api_key_sha256" in (block.content as Record<string, unknown>)
+  );
+  const proofContent =
+    proof &&
+    typeof proof.content === "object" &&
+    proof.content !== null &&
+    !Array.isArray(proof.content)
+      ? (proof.content as Record<string, unknown>)
+      : undefined;
+  const receivedSecret = proofContent?.received_secret === true;
+  const proofHash =
+    typeof proofContent?.api_key_sha256 === "string" ? proofContent.api_key_sha256 : undefined;
+  const expectedHash = expectedSecret ? sha256Hex(expectedSecret) : null;
+  checks.push(
+    check(
+      "interaction.redaction_agent_live",
+      "Agent received live secret",
+      expectedHash && receivedSecret && proofHash === expectedHash ? "passed" : "failed",
+      `received_secret=${String(receivedSecret)} hash_match=${proofHash === expectedHash}`
+    )
+  );
+
+  const replayHasInteractionResponse = replay.events.some(
+    (event) => (event.type as string) === "interaction.response"
+  );
+  checks.push(
+    check(
+      "interaction.redaction_replay",
+      "Replay remains response-free",
+      !replayHasInteractionResponse ? "passed" : "failed",
+      "Replay must not include interaction.response events"
     )
   );
 
@@ -539,18 +756,22 @@ async function runCancelExecuteChecks(
     )
   );
 
-  if (trace.rejected_events.length > 0) {
-    checks.push(
-      check(
-        "cancel.no_rejected",
-        "No rejected events",
-        "failed",
-        `${trace.rejected_events.length} rejected event(s)`
-      )
-    );
-  } else {
-    checks.push(check("cancel.no_rejected", "No rejected events", "passed", "0 rejected"));
-  }
+  const quarantined = trace.rejected_events.filter(
+    (row) => row.reject_reason === "cancel_requested"
+  );
+  const unexpectedRejected = trace.rejected_events.filter(
+    (row) => row.reject_reason !== "cancel_requested"
+  );
+  checks.push(
+    check(
+      "cancel.quarantine",
+      "Post-cancel quarantine",
+      unexpectedRejected.length === 0 ? "passed" : "failed",
+      quarantined.length > 0
+        ? `${quarantined.length} rejected with cancel_requested`
+        : "no post-cancel events before action.cancelled"
+    )
+  );
 
   const history = runtime.listActionHistory({ limit: 20 });
   const row = history.find((entry) => entry.action_id === actionId);
@@ -570,6 +791,245 @@ async function runCancelExecuteChecks(
       "Replay accepted-only",
       replay.events.length === trace.accepted_events.length ? "passed" : "failed",
       `replay=${replay.events.length} trace=${trace.accepted_events.length}`
+    )
+  );
+
+  return checks;
+}
+
+async function runCancelTimeoutExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>,
+  cancelAfterMs: number
+): Promise<ConformanceCheck[]> {
+  const checks: ConformanceCheck[] = [];
+  const accepted: ActionEvent[] = [];
+  const rejected: Array<{ type: string; reason: string | null }> = [];
+  let control: PreparedExecutionControl;
+
+  try {
+    control = runtime.executePreparedWithControl(prepared, {
+      onEvent: (event: ActionEvent, ingest: { accepted: boolean; reason?: string }) => {
+        if (ingest.accepted) {
+          accepted.push(event);
+        } else {
+          rejected.push({ type: event.type, reason: ingest.reason ?? null });
+        }
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    return checks;
+  }
+
+  await sleep(cancelAfterMs);
+
+  try {
+    const first = (await control.cancel()) as Record<string, unknown>;
+    const second = (await control.cancel()) as Record<string, unknown>;
+    checks.push(
+      check(
+        "cancel.agent_response",
+        "agent.cancel response",
+        first["status"] === "cancel_requested" ? "passed" : "failed",
+        String(first["status"] ?? "missing status")
+      )
+    );
+    checks.push(
+      check(
+        "cancel.idempotent",
+        "Idempotent cancel",
+        second["status"] === "cancel_requested" || second["status"] === "noop" ? "passed" : "failed",
+        `first=${String(first["status"])} second=${String(second["status"])}`
+      )
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("cancel.agent_response", "agent.cancel response", "failed", message));
+    control.close();
+    return checks;
+  }
+
+  let terminal: Awaited<ReturnType<ConsolerRuntime["executePrepared"]>>;
+  try {
+    terminal = await control.done;
+    checks.push(
+      check("command.execute", "Execute", "passed", `terminal=${terminal.state}`)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    control.close();
+    return checks;
+  } finally {
+    control.close();
+  }
+
+  checks.push(
+    check(
+      "cancel.timeout_terminal_state",
+      "Force-kill failed terminal",
+      terminal.state === "failed" ? "passed" : "failed",
+      `terminal=${terminal.state}`
+    )
+  );
+
+  checks.push(
+    check(
+      "cancel.timeout_control_error",
+      "Cancel timeout control error",
+      terminal.control_error?.code === "cancel_timeout" ? "passed" : "failed",
+      terminal.control_error?.code ?? "missing control_error"
+    )
+  );
+
+  const hasCancelledEvent = accepted.some((event) => event.type === "action.cancelled");
+  checks.push(
+    check(
+      "cancel.timeout_no_cancelled_event",
+      "No synthetic action.cancelled",
+      hasCancelledEvent ? "failed" : "passed",
+      hasCancelledEvent ? "action.cancelled present" : "no action.cancelled"
+    )
+  );
+
+  const quarantined = rejected.filter((row) => row.reason === "cancel_requested");
+  checks.push(
+    check(
+      "cancel.timeout_quarantine",
+      "Post-cancel events quarantined",
+      quarantined.length > 0 ? "passed" : "failed",
+      `${quarantined.length} rejected with cancel_requested`
+    )
+  );
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  checks.push(
+    check(
+      "cancel.timeout_trace_terminal",
+      "Trace failed terminal",
+      trace.terminal_state === "failed" ? "passed" : "failed",
+      `terminal_state=${trace.terminal_state ?? "none"}`
+    )
+  );
+
+  checks.push(
+    check(
+      "cancel.timeout_trace_control_error",
+      "Trace control error",
+      trace.latest_run_control_error?.code === "cancel_timeout" ? "passed" : "failed",
+      trace.latest_run_control_error?.code ?? "missing"
+    )
+  );
+
+  const replay = runtime.getReplay(actionId);
+  const hasFakeTerminal = replay.events.some((event) =>
+    ["action.succeeded", "action.failed", "action.cancelled"].includes(event.type)
+  );
+  checks.push(
+    check(
+      "cancel.timeout_replay",
+      "Replay has no fake terminal",
+      !hasFakeTerminal ? "passed" : "failed",
+      hasFakeTerminal ? "unexpected terminal event in replay" : "no terminal events"
+    )
+  );
+
+  return checks;
+}
+
+async function runTimeoutExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>
+): Promise<ConformanceCheck[]> {
+  const checks: ConformanceCheck[] = [];
+  const accepted: ActionEvent[] = [];
+  const mode = String(prepared.action.args["mode"] ?? "abort");
+
+  try {
+    const terminal = await runtime.executePrepared(prepared, {
+      onEvent: (event) => {
+        accepted.push(event);
+      }
+    });
+    checks.push(
+      check("command.execute", "Execute", "passed", `terminal=${terminal.state}`)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    return checks;
+  }
+
+  const hasInteraction = accepted.some((event) => event.type === "interaction.required");
+  checks.push(
+    check(
+      "interaction.required_event",
+      "interaction.required event",
+      hasInteraction ? "passed" : "failed",
+      hasInteraction ? "interaction.required present" : "Missing interaction.required"
+    )
+  );
+
+  const expectedTerminal = mode === "abort" ? "action.failed" : "action.succeeded";
+  const hasTerminal = accepted.some((event) => event.type === expectedTerminal);
+  checks.push(
+    check(
+      "interaction.timeout_terminal",
+      "Timeout terminal event",
+      hasTerminal ? "passed" : "failed",
+      hasTerminal ? expectedTerminal : `Missing ${expectedTerminal}`
+    )
+  );
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  const interaction = trace.interactions[0];
+  checks.push(
+    check(
+      "interaction.timeout_trace",
+      "Timeout trace metadata",
+      interaction?.timeout_triggered_at ? "passed" : "failed",
+      interaction
+        ? `status=${interaction.status} outcome=${interaction.timeout_outcome ?? "none"}`
+        : "No interaction trace row"
+    )
+  );
+
+  if (mode === "abort") {
+    checks.push(
+      check(
+        "interaction.timeout_abort_status",
+        "Abort timeout status",
+        interaction?.status === "timed_out" ? "passed" : "failed",
+        `status=${interaction?.status ?? "none"}`
+      )
+    );
+  } else {
+    checks.push(
+      check(
+        "interaction.timeout_response",
+        "Timeout routed response",
+        interaction?.status === "responded" && interaction.response !== null ? "passed" : "failed",
+        `status=${interaction?.status ?? "none"}`
+      )
+    );
+  }
+
+  const replay = runtime.getReplay(actionId);
+  const replayHasInteractionResponse = replay.events.some(
+    (event) => (event.type as string) === "interaction.response"
+  );
+  checks.push(
+    check(
+      "interaction.timeout_replay",
+      "Replay remains response-free",
+      !replayHasInteractionResponse ? "passed" : "failed",
+      replayHasInteractionResponse
+        ? "Replay must not include interaction.response events"
+        : "No interaction.response events in replay"
     )
   );
 
@@ -757,7 +1217,10 @@ export async function runAgentConformance(
   }
 
   const checks: ConformanceCheck[] = [];
-  const runtime = new ConsolerRuntime({ rootDir });
+  const runtime = new ConsolerRuntime({
+    rootDir,
+    ...(input.cancelTimeoutMs !== undefined ? { cancelTimeoutMs: input.cancelTimeoutMs } : {})
+  });
   let report: ConformanceReport;
 
   try {
@@ -815,6 +1278,7 @@ export async function runAgentConformance(
               ...(input.approvePreview ? { approvePreview: true } : {}),
               ...(input.approve ? { approve: true } : {}),
               ...(input.cancelAfterMs !== undefined ? { cancelAfterMs: input.cancelAfterMs } : {}),
+              ...(input.cancelTimeoutMs !== undefined ? { cancelTimeoutMs: input.cancelTimeoutMs } : {}),
               ...(input.interactionResponse !== undefined
                 ? { interactionResponse: input.interactionResponse }
                 : {})
@@ -833,8 +1297,9 @@ export async function runAgentConformance(
         )
       );
     }
-  } catch {
-    // base checks already recorded failure rows
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("conformance.harness", "Harness", "failed", message));
   } finally {
     runtime.store.db.close();
   }

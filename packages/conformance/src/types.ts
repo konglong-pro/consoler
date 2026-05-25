@@ -34,6 +34,8 @@ export interface RunAgentConformanceInput {
   approve?: boolean;
   /** Cooperative cancel: wait then call agent.cancel during execute. */
   cancelAfterMs?: number;
+  /** Runtime cancel timeout for force-kill fallback (requires cancelAfterMs). */
+  cancelTimeoutMs?: number;
   /** Pre-seeded interaction response for interactive conformance commands. */
   interactionResponse?: unknown;
   /** Remove temp rootDir when conformance created it. */

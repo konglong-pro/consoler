@@ -10,8 +10,17 @@ import type {
 
 import type { EventIngestResult } from "./event-store.js";
 
+export type RuntimeControlErrorCode = "cancel_timeout" | "missing_terminal_after_cancel";
+
+export interface RuntimeControlError {
+  code: RuntimeControlErrorCode;
+  message: string;
+}
+
 export interface ConsolerRuntimeOptions {
   rootDir?: string;
+  /** Force-kill fallback when cooperative cancel does not emit action.cancelled. Default 5000. */
+  cancelTimeoutMs?: number;
 }
 
 export interface CommandArgsInput {
@@ -77,6 +86,7 @@ export interface RuntimeTerminalResult {
   run_id: string;
   state: "succeeded" | "failed" | "cancelled";
   events: ActionEvent[];
+  control_error?: RuntimeControlError;
 }
 
 export interface PreparedExecutionControl {

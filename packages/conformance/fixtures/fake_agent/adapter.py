@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -23,8 +24,11 @@ class ConformanceFakeAdapter(AgentAdapter):
             "conformance.static_echo",
             "conformance.probe_echo",
             "conformance.slow_cancel",
+            "conformance.slow_ignore_cancel",
             "conformance.interactive_choice",
             "conformance.interactive_form",
+            "conformance.interactive_timeout",
+            "conformance.interactive_redaction",
         }:
             raise AgentError("command.not_found", command)
         if not str(args.get("message", "")).strip():
@@ -67,6 +71,24 @@ class ConformanceFakeAdapter(AgentAdapter):
         interaction=None,
     ) -> dict[str, Any]:
         self.validate(command, args)
+
+        if command == "conformance.slow_ignore_cancel":
+            iterations = int(args.get("iterations", 400))
+            for index in range(iterations):
+                emitter.emit("log", message=f"ignore tick {index}: {args['message']}")
+                emitter.emit(
+                    "progress.updated",
+                    progress=min(0.99, (index + 1) / iterations),
+                    message=f"ignore tick {index}",
+                )
+                time.sleep(0.05)
+            emitter.emit("action.succeeded", message="should not reach success")
+            return {
+                "blocks": [
+                    markdown_block("# Should not finish", title="result"),
+                ]
+            }
+
         cancel_flag.check("execute")
 
         if command == "conformance.interactive_choice":
@@ -92,6 +114,114 @@ class ConformanceFakeAdapter(AgentAdapter):
                 "blocks": [
                     markdown_block("# Alternate choice", title="result"),
                     json_block({"choice": choice}, title="payload"),
+                ]
+            }
+
+        if command == "conformance.interactive_timeout":
+            if interaction is None:
+                raise AgentError("interaction.required", "interaction helper missing")
+            mode = str(args.get("mode", "abort"))
+            if mode not in {"abort", "use_default", "skip", "continue"}:
+                raise AgentError("args.invalid", "mode must be abort, use_default, skip, or continue")
+            timeout_policy = {"timeout_seconds": 0.5, "on_timeout": mode}
+            if mode == "use_default":
+                result = interaction.request(
+                    interaction_id=f"timeout-{action_id}",
+                    title="Timeout policy",
+                    message=f"Waiting for timeout mode={mode}",
+                    prompt_schema={
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["picked"],
+                        "properties": {"picked": {"type": "boolean"}},
+                    },
+                    default_response={"picked": True},
+                    timeout_policy=timeout_policy,
+                )
+            else:
+                result = interaction.request(
+                    interaction_id=f"timeout-{action_id}",
+                    title="Timeout policy",
+                    message=f"Waiting for timeout mode={mode}",
+                    choices=[{"id": "never", "label": "Should not be picked"}],
+                    timeout_policy=timeout_policy,
+                )
+            if mode == "use_default":
+                expected = {"picked": True}
+                if result != expected:
+                    raise AgentError(
+                        "timeout.unexpected",
+                        f"use_default expected {expected}, got {result}",
+                    )
+                return {
+                    "blocks": [
+                        markdown_block("# Timed out (use_default)", title="result"),
+                        json_block(result, title="timeout-default"),
+                    ]
+                }
+            if mode == "skip":
+                expected = {"timed_out": True, "action": "skip"}
+                if result != expected:
+                    raise AgentError("timeout.unexpected", f"skip expected {expected}, got {result}")
+                return {
+                    "blocks": [
+                        markdown_block("# Timed out (skip)", title="result"),
+                        json_block(result, title="timeout-skip"),
+                    ]
+                }
+            if mode == "continue":
+                expected = {"timed_out": True, "action": "continue"}
+                if result != expected:
+                    raise AgentError(
+                        "timeout.unexpected",
+                        f"continue expected {expected}, got {result}",
+                    )
+                return {
+                    "blocks": [
+                        markdown_block("# Timed out (continue)", title="result"),
+                        json_block(result, title="timeout-continue"),
+                    ]
+                }
+            raise AgentError("timeout.unexpected", f"abort should have raised, got {result}")
+
+        if command == "conformance.interactive_redaction":
+            if interaction is None:
+                raise AgentError("interaction.required", "interaction helper missing")
+            response = interaction.request(
+                interaction_id=f"redact-{action_id}",
+                title="Redaction probe",
+                message=f"Enter values for {args['message']}",
+                prompt_schema={
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["label", "api_key"],
+                    "properties": {
+                        "label": {"type": "string", "minLength": 1},
+                        "api_key": {"type": "string", "minLength": 1, "x-consoler-redact": True},
+                    },
+                },
+                default_response={"label": "default-label", "api_key": "default-secret"},
+            )
+            if not isinstance(response, dict):
+                raise AgentError("interaction.invalid", "expected object response")
+            received = response.get("api_key")
+            if received in (None, "", "[REDACTED]"):
+                raise AgentError(
+                    "redaction.unexpected",
+                    f"agent expected live api_key, got {received!r}",
+                )
+            secret_hash = hashlib.sha256(str(received).encode("utf-8")).hexdigest()
+            return {
+                "blocks": [
+                    markdown_block("# Redaction proof", title="result"),
+                    json_block(
+                        {
+                            "label": response.get("label"),
+                            "received_secret": True,
+                            "api_key_sha256": secret_hash,
+                        },
+                        title="redaction-proof",
+                    ),
                 ]
             }
 

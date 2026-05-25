@@ -82,8 +82,28 @@ A structured prompt an agent emits during execution as an `interaction.required`
 
 ## Interaction Response
 
-The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1i persists the full response JSON in the `interactions` table for trace and history debugging. Replay remains accepted agent events only and does not include interaction responses.
+The user’s answer routed back to the same live agent process through `action.respond_interaction`. V1i persists response JSON in the `interactions` table for trace and history debugging. V1l may redact marked top-level object fields in persisted trace data and stored `interaction.required` payloads while the live agent still receives the full response. Replay remains accepted agent events only and does not include interaction responses.
+
+## Interaction Redaction
+
+Opt-in trace persistence protection for object-schema interactions. Agents mark top-level `prompt_schema.properties.<field>` with `x-consoler-redact: true`; the runtime replaces those field values with `"[REDACTED]"` in SQLite and records JSON Pointer paths in `redacted_paths`. Redaction does not change the live `action.respond_interaction` payload.
 
 ## Pending Interaction
 
 The single in-flight interaction a run accepts at a time. The runtime tracks one pending `interaction_id` between an accepted `interaction.required` event and a successful `respondInteraction` call (or run termination).
+
+## Runtime Control Lock
+
+A per-run internal execution phase tracked by the runtime during live `executePreparedWithControl`: `running`, `cancel_requested`, `cancelling`, and `terminal`. The lock coordinates idempotent cancel requests, post-cancel event quarantine, and force-kill fallback without changing wire protocol `epoch` semantics.
+
+## Cancel Timeout
+
+The runtime-owned timer started when the first `agent.cancel` request is sent. If the agent does not emit an accepted `action.cancelled` before the timeout (default 5000ms, overridable via `ConsolerRuntimeOptions.cancelTimeoutMs`), the runtime force-kills the agent process.
+
+## Force-kill Fallback
+
+When cancel timeout expires, the runtime kills the agent process, abandons pending interactions, closes the run as `failed`, and records a run-level control error. The runtime must not synthesize `action.cancelled` or other terminal agent events on this path.
+
+## Control Error
+
+A run-level failure recorded when strong runtime control closes a run without an agent terminal event, such as `cancel_timeout`. Control errors appear in history/trace on the `runs` row; replay remains accepted agent events only.

@@ -742,6 +742,12 @@ export function App({
             </Text>
             <Text>{pendingInteraction.title}</Text>
             <Text dimColor>{pendingInteraction.message}</Text>
+            {pendingInteraction.timeout_policy ? (
+              <Text dimColor>
+                Timeout: {pendingInteraction.timeout_policy.timeout_seconds}s →{" "}
+                {pendingInteraction.timeout_policy.on_timeout}
+              </Text>
+            ) : null}
             {pendingInteraction.blocks?.map((block, index) => (
               <RenderableBlockView key={`ix-block-${index}`} block={block} />
             ))}

@@ -21,11 +21,26 @@
         }
       }
     },
-    "prompt_schema": { "type": "object" },
+    "prompt_schema": {
+      "type": "object",
+      "description": "JSON Schema for object responses. Top-level properties may set x-consoler-redact: true to redact persisted trace values only."
+    },
     "default_response": {},
     "blocks": {
       "type": "array",
       "items": { "$ref": "https://consoler.dev/schemas/v0/renderable-block.json" }
+    },
+    "timeout_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeout_seconds", "on_timeout"],
+      "properties": {
+        "timeout_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "on_timeout": {
+          "type": "string",
+          "enum": ["abort", "use_default", "skip", "continue"]
+        }
+      }
     }
   }
 }

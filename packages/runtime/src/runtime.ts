@@ -28,6 +28,7 @@ import {
 import { ConsolerStore } from "./db/store.js";
 import { EventStore } from "./event-store.js";
 import { validateInteractionResponse } from "./interaction-response.js";
+import { buildTimeoutControlResponse, isTimeoutControlResponse } from "./interaction-timeout.js";
 import type {
   CommandArgsInput,
   ConsolerRuntimeOptions,
@@ -36,12 +37,17 @@ import type {
   PreviewLifecycleResult,
   PreviewOptions,
   PreparedExecutionControl,
+  RuntimeControlError,
   RuntimeEventHandlers,
   RuntimeTerminalResult,
   RunOptions,
   RunResult,
   RunWithEventsResult
 } from "./lifecycle-types.js";
+
+const DEFAULT_CANCEL_TIMEOUT_MS = 5000;
+
+type ExecutionControlPhase = "running" | "cancel_requested" | "cancelling" | "terminal";
 import { computePlanHash } from "./plan-hash.js";
 import { getActionTrace, listActionHistory } from "./action-read.js";
 import type { ListActionHistoryOptions } from "./action-read-types.js";
@@ -59,6 +65,8 @@ export type {
   PreviewOptions,
   PreparedExecutionControl,
   RuntimeEventHandlers,
+  RuntimeControlError,
+  RuntimeControlErrorCode,
   RuntimeLifecycleState,
   RuntimeTerminalResult,
   RunOptions,
@@ -70,9 +78,11 @@ export class ConsolerRuntime {
   readonly store: ConsolerStore;
   readonly events: EventStore;
   private readonly rootDir: string | undefined;
+  private readonly cancelTimeoutMs: number;
 
   constructor(options: ConsolerRuntimeOptions = {}) {
     this.rootDir = options.rootDir;
+    this.cancelTimeoutMs = options.cancelTimeoutMs ?? DEFAULT_CANCEL_TIMEOUT_MS;
     this.store = new ConsolerStore(options.rootDir);
     this.events = new EventStore(this.store);
   }
@@ -226,6 +236,12 @@ export class ConsolerRuntime {
 
     const acceptedEvents: ActionEvent[] = [];
     let pendingInteraction: InteractionRequest | null = null;
+    let interactionTimer: ReturnType<typeof setTimeout> | null = null;
+    let interactionOutcomeClaimed = false;
+    let controlPhase: ExecutionControlPhase = "running";
+    let cancelTimer: ReturnType<typeof setTimeout> | null = null;
+    let cancelRequestResult: Promise<unknown> | null = null;
+    let ingestionEnabled = true;
     let settled = false;
     let resolveDone!: (value: RuntimeTerminalResult) => void;
     let rejectDone!: (error: Error) => void;
@@ -234,33 +250,99 @@ export class ConsolerRuntime {
       rejectDone = reject;
     });
 
+    const clearInteractionTimer = (): void => {
+      if (interactionTimer !== null) {
+        clearTimeout(interactionTimer);
+        interactionTimer = null;
+      }
+    };
+
+    const clearCancelTimer = (): void => {
+      if (cancelTimer !== null) {
+        clearTimeout(cancelTimer);
+        cancelTimer = null;
+      }
+    };
+
+    const finishTerminal = (result: RuntimeTerminalResult): void => {
+      if (settled) return;
+      settled = true;
+      ingestionEnabled = false;
+      controlPhase = "terminal";
+      clearInteractionTimer();
+      clearCancelTimer();
+      this.store.abandonPendingInteractionsForRun(runId);
+      pendingInteraction = null;
+      handlers.onStateChange?.(result.state);
+      resolveDone(result);
+    };
+
+    const finishFromAcceptedEvents = (controlError?: RuntimeControlError): void => {
+      const state = terminalStateFromEvents(acceptedEvents);
+      finishTerminal({
+        run_id: runId,
+        state,
+        events: [...acceptedEvents],
+        ...(controlError ? { control_error: controlError } : {})
+      });
+    };
+
     const maybeFinish = (): void => {
       if (settled) return;
       const hasTerminal = acceptedEvents.some((event) => TERMINAL_EVENT_TYPES.has(event.type));
       if (!hasTerminal) return;
-      settled = true;
+      clearCancelTimer();
+      finishFromAcceptedEvents();
+    };
+
+    const handleCancelTimeout = (): void => {
+      if (settled || controlPhase === "terminal") return;
+      controlPhase = "terminal";
+      clearInteractionTimer();
+      clearCancelTimer();
       this.store.abandonPendingInteractionsForRun(runId);
       pendingInteraction = null;
-      const state = terminalStateFromEvents(acceptedEvents);
-      handlers.onStateChange?.(state);
-      resolveDone({ run_id: runId, state, events: [...acceptedEvents] });
+      const controlError: RuntimeControlError = {
+        code: "cancel_timeout",
+        message: `Cancel was requested but action.cancelled was not received within ${this.cancelTimeoutMs}ms`
+      };
+      this.store.closeRun(runId, "failed", controlError);
+      execClient.kill();
+      finishTerminal({
+        run_id: runId,
+        state: "failed",
+        events: [...acceptedEvents],
+        control_error: controlError
+      });
+    };
+
+    const startCancelTimeout = (): void => {
+      clearCancelTimer();
+      cancelTimer = setTimeout(() => {
+        handleCancelTimeout();
+      }, this.cancelTimeoutMs);
     };
 
     const execClient = this.spawnClient(prepared.entry, (notification) => {
+      if (!ingestionEnabled || settled) return;
       if (notification.method !== "agent.event") return;
       const raw = notification.params?.["event"];
       if (!raw) return;
+      const cancelQuarantine =
+        controlPhase === "cancel_requested" || controlPhase === "cancelling";
       const ingest = this.events.ingest(
         runId,
         prepared.action.action_id,
         prepared.action.agent_id,
         prepared.action.command,
-        raw
+        raw,
+        { cancelQuarantine }
       );
       if (ingest.accepted && ingest.event) {
         acceptedEvents.push(ingest.event);
         if (ingest.event.type === "interaction.required" && ingest.event.interaction) {
           pendingInteraction = ingest.event.interaction;
+          interactionOutcomeClaimed = false;
           this.store.insertPendingInteraction(
             runId,
             prepared.action.action_id,
@@ -269,6 +351,13 @@ export class ConsolerRuntime {
             ingest.event.interaction,
             ingest.event.timestamp
           );
+          clearInteractionTimer();
+          const policy = ingest.event.interaction.timeout_policy;
+          if (policy) {
+            interactionTimer = setTimeout(() => {
+              void handleInteractionTimeout();
+            }, policy.timeout_seconds * 1000);
+          }
         }
         handlers.onEvent?.(ingest.event, ingest);
         maybeFinish();
@@ -288,24 +377,96 @@ export class ConsolerRuntime {
 
     void executePromise
       .then(() => {
+        if (settled) return;
         maybeFinish();
         if (!settled) {
-          settled = true;
-          this.store.abandonPendingInteractionsForRun(runId);
-          pendingInteraction = null;
-          const state = terminalStateFromEvents(acceptedEvents);
-          handlers.onStateChange?.(state);
-          resolveDone({ run_id: runId, state, events: [...acceptedEvents] });
+          const run = this.store.getRun(runId);
+          if (run && run.status !== "running") {
+            const controlError =
+              run.control_error_code && run.control_error_message
+                ? {
+                    code: run.control_error_code as RuntimeControlError["code"],
+                    message: run.control_error_message
+                  }
+                : undefined;
+            finishFromAcceptedEvents(controlError);
+            return;
+          }
+          finishFromAcceptedEvents();
         }
       })
       .catch((error: unknown) => {
-        if (!settled) {
-          settled = true;
-          this.store.abandonPendingInteractionsForRun(runId);
-          pendingInteraction = null;
-          rejectDone(error instanceof Error ? error : new Error(String(error)));
-        }
+        if (settled) return;
+        settled = true;
+        ingestionEnabled = false;
+        controlPhase = "terminal";
+        clearInteractionTimer();
+        clearCancelTimer();
+        this.store.abandonPendingInteractionsForRun(runId);
+        pendingInteraction = null;
+        rejectDone(error instanceof Error ? error : new Error(String(error)));
       });
+
+    const deliverInteractionResponse = async (
+      interactionId: string,
+      response: unknown,
+      timeoutMeta?: { triggered_at: string; outcome: string }
+    ): Promise<unknown> => {
+      const interaction = pendingInteraction;
+      if (!interaction || interaction.interaction_id !== interactionId) {
+        throw new Error(`Unknown interaction id: ${interactionId}`);
+      }
+      if (!isTimeoutControlResponse(response)) {
+        validateInteractionResponse(interaction, response);
+      }
+      if (timeoutMeta?.outcome === "abort") {
+        this.store.markInteractionTimedOut(runId, interactionId, timeoutMeta);
+      } else {
+        this.store.markInteractionResponded(runId, interactionId, response, timeoutMeta);
+      }
+      pendingInteraction = null;
+      clearInteractionTimer();
+      try {
+        return await execClient.request("action.respond_interaction", {
+          interaction_id: interactionId,
+          response
+        });
+      } catch (error) {
+        if (timeoutMeta?.outcome === "abort") {
+          return { ok: false };
+        }
+        throw error;
+      }
+    };
+
+    const claimInteractionOutcome = (): boolean => {
+      if (interactionOutcomeClaimed || settled || !pendingInteraction) {
+        return false;
+      }
+      interactionOutcomeClaimed = true;
+      return true;
+    };
+
+    const handleInteractionTimeout = async (): Promise<void> => {
+      if (!claimInteractionOutcome()) {
+        return;
+      }
+      const interaction = pendingInteraction;
+      if (!interaction?.timeout_policy) {
+        interactionOutcomeClaimed = false;
+        return;
+      }
+      const triggeredAt = new Date().toISOString();
+      const { response, on_timeout: onTimeout } = buildTimeoutControlResponse(interaction);
+      try {
+        await deliverInteractionResponse(interaction.interaction_id, response, {
+          triggered_at: triggeredAt,
+          outcome: onTimeout
+        });
+      } catch {
+        interactionOutcomeClaimed = false;
+      }
+    };
 
     const respondInteraction = async (interactionId: string, response: unknown): Promise<unknown> => {
       if (settled) {
@@ -314,25 +475,46 @@ export class ConsolerRuntime {
       if (!pendingInteraction) {
         throw new Error("No pending interaction");
       }
-      if (pendingInteraction.interaction_id !== interactionId) {
-        throw new Error(`Unknown interaction id: ${interactionId}`);
+      if (!claimInteractionOutcome()) {
+        throw new Error("No pending interaction");
       }
-      validateInteractionResponse(pendingInteraction, response);
-      // Persist before RPC so a concurrent terminal event cannot abandon the row first.
-      this.store.markInteractionResponded(runId, interactionId, response);
-      pendingInteraction = null;
-      return execClient.request("action.respond_interaction", {
-        interaction_id: interactionId,
-        response
+      try {
+        return await deliverInteractionResponse(interactionId, response);
+      } catch (error) {
+        interactionOutcomeClaimed = false;
+        throw error;
+      }
+    };
+
+    const cancel = (): Promise<unknown> => {
+      if (cancelRequestResult) {
+        return cancelRequestResult;
+      }
+      if (settled || controlPhase === "terminal") {
+        return Promise.resolve({ status: "noop", reason: "run_terminal" });
+      }
+      controlPhase = "cancel_requested";
+      cancelRequestResult = execClient.request("agent.cancel", {}).then((result) => {
+        if (!settled && controlPhase === "cancel_requested") {
+          controlPhase = "cancelling";
+          startCancelTimeout();
+        }
+        return result;
       });
+      return cancelRequestResult;
     };
 
     return {
       run_id: runId,
       done,
-      cancel: () => execClient.request("agent.cancel", {}),
+      cancel,
       respondInteraction,
-      close: () => execClient.kill()
+      close: () => {
+        ingestionEnabled = false;
+        clearInteractionTimer();
+        clearCancelTimer();
+        execClient.kill();
+      }
     };
   }
 

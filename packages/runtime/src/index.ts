@@ -7,6 +7,8 @@ export {
   type RuntimeEventHandlers,
   type RuntimeLifecycleState,
   type RuntimeTerminalResult,
+  type RuntimeControlError,
+  type RuntimeControlErrorCode,
   type PreviewLifecycleResult,
   type PreviewOptions,
   type RunOptions,
@@ -35,6 +37,7 @@ export type {
   ActionHistoryEntry,
   ActionHistoryStatus,
   ActionRunSummary,
+  RunControlErrorSummary,
   ActionTrace,
   InteractionTraceRecord,
   InteractionTraceStatus,
@@ -53,6 +56,17 @@ export {
 export { formatActionHistory, formatActionTrace } from "./format-action-read.js";
 export { summarizeRenderableBlock } from "./format-block.js";
 export { validateInteractionResponse } from "./interaction-response.js";
+export {
+  buildTimeoutControlResponse,
+  validateInteractionTimeoutPolicy
+} from "./interaction-timeout.js";
+export {
+  REDACTED_SENTINEL,
+  collectRedactPropertyPaths,
+  redactInteractionRequest,
+  redactInteractionResponse,
+  redactInteractionRequiredEvent
+} from "./interaction-redaction.js";
 export { JsonRpcAgentClient, LineBufferParser, parseNdjsonLine } from "./transport/jsonrpc.js";
 export { loadRegistry, getEnabledAgent } from "./registry.js";
 export { consolerDataDir, databasePath, registryPath, findConsolerRoot } from "./paths.js";

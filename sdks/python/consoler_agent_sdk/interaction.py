@@ -31,6 +31,7 @@ class InteractionHelper:
         prompt_schema: dict[str, Any] | None = None,
         default_response: Any | None = None,
         blocks: list[dict[str, Any]] | None = None,
+        timeout_policy: dict[str, Any] | None = None,
     ) -> Any:
         with self._lock:
             if self._pending_id is not None:
@@ -52,6 +53,8 @@ class InteractionHelper:
             interaction["default_response"] = default_response
         if blocks is not None:
             interaction["blocks"] = blocks
+        if timeout_policy is not None:
+            interaction["timeout_policy"] = timeout_policy
 
         self.emitter.emit("interaction.required", interaction=interaction)
 
@@ -77,6 +80,21 @@ class InteractionHelper:
                     "interaction.stale",
                     f"Unknown interaction id: {interaction_id}",
                 )
+            if isinstance(response, dict) and response.get("timed_out") is True:
+                action = response.get("action")
+                if action == "abort":
+                    self._error = AgentError(
+                        "interaction.timeout",
+                        "Interaction timed out",
+                    )
+                    self._pending_id = None
+                    self._condition.notify_all()
+                    return {"ok": True}
+                if action in ("skip", "continue"):
+                    self._response = response
+                    self._pending_id = None
+                    self._condition.notify_all()
+                    return {"ok": True}
             self._response = response
             self._pending_id = None
             self._condition.notify_all()
