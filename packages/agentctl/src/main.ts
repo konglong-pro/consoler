@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import path from "node:path";
 import { Command } from "commander";
 
 import { formatConformanceReport, runAgentConformance } from "@consoler/conformance";
@@ -11,9 +12,14 @@ import { loadArgsFile, loadJsonValue } from "./json-load.js";
 import { createStderrReadLine } from "./readline-stderr.js";
 import { runApprovedWithInteractions } from "./run-approved.js";
 
+function resolveRegistryRoot(): string {
+  const rootDir = process.env.CONSOLER_ROOT;
+  return rootDir ? path.resolve(rootDir) : findConsolerRoot(process.cwd());
+}
+
 function createRuntime(): ConsolerRuntime {
   const rootDir = process.env.CONSOLER_ROOT;
-  return rootDir ? new ConsolerRuntime({ rootDir }) : new ConsolerRuntime();
+  return rootDir ? new ConsolerRuntime({ rootDir: path.resolve(rootDir) }) : new ConsolerRuntime();
 }
 
 const program = new Command()
@@ -223,7 +229,7 @@ program
 
       const report = await runAgentConformance({
         agentId,
-        registryRoot: findConsolerRoot(process.cwd()),
+        registryRoot: resolveRegistryRoot(),
         ...(options.command ? { command: options.command } : {}),
         ...(options.args ? { args: loadArgsFile(options.args) } : {}),
         approvePreview: Boolean(options.approvePreview),

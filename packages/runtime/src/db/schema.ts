@@ -99,6 +99,17 @@ CREATE TABLE IF NOT EXISTS interactions (
   requested_at TEXT NOT NULL,
   responded_at TEXT,
   closed_at TEXT,
+  timeout_triggered_at TEXT,
+  timeout_outcome TEXT,
   UNIQUE(run_id, interaction_id)
 );
+`;
+
+export const INTERACTIONS_MIGRATION_SQL = `
+ALTER TABLE interactions ADD COLUMN timeout_triggered_at TEXT;
+ALTER TABLE interactions ADD COLUMN timeout_outcome TEXT;
+`;
+
+export const INTERACTIONS_REDACTION_MIGRATION_SQL = `
+ALTER TABLE interactions ADD COLUMN redacted_paths_json TEXT;
 `;

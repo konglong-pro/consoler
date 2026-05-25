@@ -34,6 +34,13 @@ export interface InteractionChoice {
   label: string;
 }
 
+export type InteractionTimeoutAction = "abort" | "use_default" | "skip" | "continue";
+
+export interface InteractionTimeoutPolicy {
+  timeout_seconds: number;
+  on_timeout: InteractionTimeoutAction;
+}
+
 export interface InteractionRequest {
   interaction_id: string;
   title: string;
@@ -42,6 +49,7 @@ export interface InteractionRequest {
   prompt_schema?: Record<string, unknown>;
   default_response?: unknown;
   blocks?: RenderableBlock[];
+  timeout_policy?: InteractionTimeoutPolicy;
 }
 
 export const TERMINAL_EVENT_TYPES: ReadonlySet<ActionEventType> = new Set([

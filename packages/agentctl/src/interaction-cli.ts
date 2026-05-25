@@ -145,6 +145,11 @@ export function formatInteractionPrompt(request: InteractionRequest): string {
       lines.push(`  ${summarizeRenderableBlock(block)}`);
     }
   }
+  if (request.timeout_policy) {
+    lines.push(
+      `Timeout: ${request.timeout_policy.timeout_seconds}s → ${request.timeout_policy.on_timeout}`
+    );
+  }
   if (request.choices?.length) {
     lines.push("");
     request.choices.forEach((choice, index) => {
@@ -172,6 +177,14 @@ export class NonInteractiveInteractionError extends Error {
   }
 }
 
+/** Runtime owns timeout outcomes; the CLI must not prompt or respond. */
+export class DeferInteractionToRuntimeError extends Error {
+  constructor() {
+    super("Interaction deferred to runtime timeout policy");
+    this.name = "DeferInteractionToRuntimeError";
+  }
+}
+
 export async function promptInteractionResponse(
   request: InteractionRequest,
   ctx: InteractionPromptContext
@@ -186,13 +199,18 @@ export async function promptInteractionResponse(
     return seeded;
   }
 
-  const defaultResponse = usableDefaultResponse(request);
-  if (defaultResponse !== undefined) {
-    return defaultResponse;
-  }
-
-  if (!ctx.isTTY) {
-    throw new NonInteractiveInteractionError();
+  if (request.timeout_policy) {
+    if (!ctx.isTTY) {
+      throw new DeferInteractionToRuntimeError();
+    }
+  } else {
+    const defaultResponse = usableDefaultResponse(request);
+    if (defaultResponse !== undefined) {
+      return defaultResponse;
+    }
+    if (!ctx.isTTY) {
+      throw new NonInteractiveInteractionError();
+    }
   }
 
   ctx.writeStderr(formatInteractionPrompt(request));
@@ -233,6 +251,9 @@ export async function resolveInteractionResponseWithRetry(
       await respond(response);
       return;
     } catch (error) {
+      if (error instanceof DeferInteractionToRuntimeError) {
+        return;
+      }
       if (error instanceof NonInteractiveInteractionError) {
         throw error;
       }

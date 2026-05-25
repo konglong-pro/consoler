@@ -98,6 +98,59 @@ try {
     fail(`expected non-TTY run without --interaction-response to exit 1, got ${nonTtyRun.status}`);
   }
 
+  const timeoutArgsPath = path.join(tmpDir, "timeout-args.json");
+  writeFileSync(
+    timeoutArgsPath,
+    JSON.stringify({ message: "use_default", mode: "use_default" }),
+    "utf8"
+  );
+  const timeoutRun = runAgentctl(
+    [
+      "run",
+      FAKE_AGENT_ID,
+      "conformance.interactive_timeout",
+      "--args",
+      timeoutArgsPath,
+      "--approve"
+    ],
+    { env, pipeStdin: true }
+  );
+  if (timeoutRun.status !== 0) {
+    fail(`timeout run exited ${timeoutRun.status}\nstdout: ${timeoutRun.stdout}\nstderr: ${timeoutRun.stderr}`);
+  }
+  let timeoutResult;
+  try {
+    timeoutResult = JSON.parse(timeoutRun.stdout.trim());
+  } catch {
+    fail(`timeout run stdout is not JSON: ${timeoutRun.stdout}`);
+  }
+  const timeoutTraceRun = runAgentctl(["trace", timeoutResult.action_id, "--json"], { env });
+  if (timeoutTraceRun.status !== 0) {
+    fail(`timeout trace exited ${timeoutTraceRun.status}\nstderr: ${timeoutTraceRun.stderr}`);
+  }
+  const timeoutTrace = JSON.parse(timeoutTraceRun.stdout);
+  assert.ok(timeoutTrace.interactions?.[0]?.timeout_triggered_at, "expected runtime timeout metadata");
+  assert.equal(timeoutTrace.interactions[0]?.timeout_outcome, "use_default");
+
+  const isolatedTest = runAgentctl(
+    [
+      "test",
+      FAKE_AGENT_ID,
+      "--command",
+      "conformance.interactive_timeout",
+      "--args",
+      timeoutArgsPath,
+      "--approve",
+      "--json"
+    ],
+    { env }
+  );
+  if (isolatedTest.status !== 0) {
+    fail(`isolated test exited ${isolatedTest.status}\nstdout: ${isolatedTest.stdout}\nstderr: ${isolatedTest.stderr}`);
+  }
+  const testReport = JSON.parse(isolatedTest.stdout);
+  assert.equal(testReport.passed, true, `conformance test failed: ${JSON.stringify(testReport.checks?.filter((c) => c.status === "failed"))}`);
+
   const awaitingApproval = runAgentctl(
     ["run", FAKE_AGENT_ID, "conformance.interactive_choice", "--args", argsPath],
     { env }

@@ -12,6 +12,7 @@ import type {
   RejectedEventRecord
 } from "./action-read-types.js";
 import type { ConsolerStore, StoredEvent, StoredInteraction } from "./db/store.js";
+import { parseRedactedPathsJson } from "./interaction-redaction.js";
 import { replayAction } from "./replay.js";
 
 const DEFAULT_HISTORY_LIMIT = 20;
@@ -81,7 +82,10 @@ function toInteractionTraceRecord(row: StoredInteraction): InteractionTraceRecor
     response: row.response_json ? (JSON.parse(row.response_json) as unknown) : null,
     requested_at: row.requested_at,
     responded_at: row.responded_at,
-    closed_at: row.closed_at
+    closed_at: row.closed_at,
+    timeout_triggered_at: row.timeout_triggered_at,
+    timeout_outcome: row.timeout_outcome,
+    redacted_paths: parseRedactedPathsJson(row.redacted_paths_json)
   };
 }
 

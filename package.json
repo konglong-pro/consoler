@@ -14,6 +14,7 @@
     "test": "pnpm -r --filter \"!@consoler/conformance\" test",
     "test:conformance": "node scripts/test-conformance.mjs",
     "test:agentctl-smoke": "node scripts/test-agentctl-smoke.mjs",
+    "test:redaction-smoke": "node scripts/test-redaction-smoke.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",
     "typecheck": "pnpm -r typecheck"
   },

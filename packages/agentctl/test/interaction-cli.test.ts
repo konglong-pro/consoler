@@ -4,6 +4,7 @@ import type { InteractionRequest } from "@consoler/protocol";
 
 import {
   coerceFieldValue,
+  DeferInteractionToRuntimeError,
   fieldsFromObjectSchema,
   isSupportedInteractionRequest,
   parseChoiceInput,
@@ -60,6 +61,48 @@ describe("interaction-cli", () => {
         takeSeededResponse: () => undefined
       })
     ).rejects.toBeInstanceOf(NonInteractiveInteractionError);
+  });
+
+  it("defers to runtime when stdin is not a TTY and timeout_policy is set", async () => {
+    const timeoutRequest: InteractionRequest = {
+      interaction_id: "ix_timeout",
+      title: "Wait",
+      message: "Runtime owns timeout",
+      choices: [{ id: "never", label: "Never" }],
+      timeout_policy: { timeout_seconds: 0.5, on_timeout: "skip" }
+    };
+    await expect(
+      promptInteractionResponse(timeoutRequest, {
+        isTTY: false,
+        readLine: async () => "",
+        writeStderr: () => {},
+        takeSeededResponse: () => undefined
+      })
+    ).rejects.toBeInstanceOf(DeferInteractionToRuntimeError);
+  });
+
+  it("does not apply default_response client-side when timeout_policy is set", async () => {
+    const useDefaultRequest: InteractionRequest = {
+      interaction_id: "ix_use_default",
+      title: "Default later",
+      message: "Runtime sends default on timeout",
+      prompt_schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["picked"],
+        properties: { picked: { type: "boolean" } }
+      },
+      default_response: { picked: true },
+      timeout_policy: { timeout_seconds: 0.5, on_timeout: "use_default" }
+    };
+    await expect(
+      promptInteractionResponse(useDefaultRequest, {
+        isTTY: false,
+        readLine: async () => "",
+        writeStderr: () => {},
+        takeSeededResponse: () => undefined
+      })
+    ).rejects.toBeInstanceOf(DeferInteractionToRuntimeError);
   });
 
   it("uses seeded responses without prompting", async () => {
