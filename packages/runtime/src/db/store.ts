@@ -26,8 +26,10 @@ import {
 import {
   INTERACTIONS_MIGRATION_SQL,
   INTERACTIONS_REDACTION_MIGRATION_SQL,
+  RUNS_CONTROL_ERROR_MIGRATION_SQL,
   SCHEMA_SQL
 } from "./schema.js";
+import type { RuntimeControlErrorCode } from "../lifecycle-types.js";
 
 export interface StoredInteraction {
   id: number;
@@ -75,6 +77,7 @@ export class ConsolerStore {
     this.db.exec(SCHEMA_SQL);
     this.db.exec(HISTORY_INDEXES_SQL);
     this.migrateInteractionsTable();
+    this.migrateRunsControlErrorColumns();
   }
 
   private migrateInteractionsTable(): void {
@@ -87,8 +90,24 @@ export class ConsolerStore {
     ]);
   }
 
+  private migrateRunsControlErrorColumns(): void {
+    this.applyTableColumnMigrations("runs", RUNS_CONTROL_ERROR_MIGRATION_SQL, [
+      "control_error_code",
+      "control_error_message",
+      "control_error_at"
+    ]);
+  }
+
   private applyInteractionColumnMigrations(sql: string, requiredColumns: string[]): void {
-    const columns = this.db.prepare(`PRAGMA table_info(interactions)`).all() as Array<{
+    this.applyTableColumnMigrations("interactions", sql, requiredColumns);
+  }
+
+  private applyTableColumnMigrations(
+    table: string,
+    sql: string,
+    requiredColumns: string[]
+  ): void {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
       name: string;
     }>;
     const names = new Set(columns.map((column) => column.name));
@@ -277,16 +296,58 @@ export class ConsolerStore {
       .run(runId, actionId, agentId, command, new Date().toISOString());
   }
 
-  closeRun(runId: string, status: string): void {
-    this.db
-      .prepare(`UPDATE runs SET status = ?, ended_at = ? WHERE run_id = ?`)
-      .run(status, new Date().toISOString(), runId);
+  closeRun(
+    runId: string,
+    status: string,
+    controlError?: { code: RuntimeControlErrorCode; message: string }
+  ): boolean {
+    const endedAt = new Date().toISOString();
+    if (controlError) {
+      const result = this.db
+        .prepare(
+          `UPDATE runs
+           SET status = ?, ended_at = ?, control_error_code = ?, control_error_message = ?, control_error_at = ?
+           WHERE run_id = ? AND status = 'running'`
+        )
+        .run(
+          status,
+          endedAt,
+          controlError.code,
+          controlError.message,
+          endedAt,
+          runId
+        );
+      return result.changes > 0;
+    }
+    const result = this.db
+      .prepare(`UPDATE runs SET status = ?, ended_at = ? WHERE run_id = ? AND status = 'running'`)
+      .run(status, endedAt, runId);
+    return result.changes > 0;
   }
 
-  getRun(runId: string): { run_id: string; action_id: string; status: string } | null {
+  getRun(runId: string): {
+    run_id: string;
+    action_id: string;
+    status: string;
+    control_error_code: string | null;
+    control_error_message: string | null;
+    control_error_at: string | null;
+  } | null {
     const row = this.db
-      .prepare(`SELECT run_id, action_id, status FROM runs WHERE run_id = ?`)
-      .get(runId) as { run_id: string; action_id: string; status: string } | undefined;
+      .prepare(
+        `SELECT run_id, action_id, status, control_error_code, control_error_message, control_error_at
+         FROM runs WHERE run_id = ?`
+      )
+      .get(runId) as
+      | {
+          run_id: string;
+          action_id: string;
+          status: string;
+          control_error_code: string | null;
+          control_error_message: string | null;
+          control_error_at: string | null;
+        }
+      | undefined;
     return row ?? null;
   }
 
@@ -345,6 +406,10 @@ export class ConsolerStore {
   }
 
   isRunTerminal(runId: string): boolean {
+    const run = this.getRun(runId);
+    if (run && run.status !== "running") {
+      return true;
+    }
     const row = this.db
       .prepare(
         `SELECT 1 FROM events
@@ -379,10 +444,14 @@ export class ConsolerStore {
     status: string;
     started_at: string;
     ended_at: string | null;
+    control_error_code: string | null;
+    control_error_message: string | null;
+    control_error_at: string | null;
   }> {
     return this.db
       .prepare(
-        `SELECT run_id, action_id, agent_id, command, status, started_at, ended_at
+        `SELECT run_id, action_id, agent_id, command, status, started_at, ended_at,
+                control_error_code, control_error_message, control_error_at
          FROM runs WHERE action_id = ? ORDER BY started_at DESC`
       )
       .all(actionId) as Array<{
@@ -393,6 +462,9 @@ export class ConsolerStore {
       status: string;
       started_at: string;
       ended_at: string | null;
+      control_error_code: string | null;
+      control_error_message: string | null;
+      control_error_at: string | null;
     }>;
   }
 

@@ -27,7 +27,6 @@ describe("agentctl history and trace formatting", () => {
       created_at: "2026-05-01T12:00:00.000Z"
     });
     runtime.store.createRun("run_cli_test", "act_cli_test", "indbase", "indbase.doctor");
-    runtime.store.closeRun("run_cli_test", "succeeded");
   });
 
   afterEach(() => {
@@ -36,6 +35,7 @@ describe("agentctl history and trace formatting", () => {
   });
 
   it("history human output includes action id, command, status, latest run", () => {
+    runtime.store.closeRun("run_cli_test", "succeeded");
     const text = formatActionHistory(runtime.listActionHistory({ limit: 5 }));
     expect(text).toContain("indbase.doctor");
     expect(text).toContain("succeeded");
@@ -44,6 +44,7 @@ describe("agentctl history and trace formatting", () => {
   });
 
   it("history json returns structured list", () => {
+    runtime.store.closeRun("run_cli_test", "succeeded");
     const rows = runtime.listActionHistory({ limit: 5, command: "indbase.doctor" });
     expect(rows).toHaveLength(1);
     const entry = rows[0] as ActionHistoryEntry;

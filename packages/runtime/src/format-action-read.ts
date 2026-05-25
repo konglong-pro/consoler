@@ -31,6 +31,14 @@ export function formatActionTrace(trace: ActionTrace): string {
     `Command: ${trace.action.command} (${trace.action.agent_id})`,
     `Created: ${trace.action.created_at}`,
     `Status: ${trace.terminal_state ?? "prepared"}`,
+    ...(trace.latest_run_control_error
+      ? [
+          `Control error: ${trace.latest_run_control_error.code} — ${trace.latest_run_control_error.message}`,
+          ...(trace.latest_run_control_error.at
+            ? [`Control error at: ${trace.latest_run_control_error.at}`]
+            : [])
+        ]
+      : []),
     ""
   ];
 
@@ -64,8 +72,11 @@ export function formatActionTrace(trace: ActionTrace): string {
     lines.push("Runs:");
     for (const run of trace.runs) {
       lines.push(
-        `  ${run.run_id} status=${run.status} started=${run.started_at}${run.ended_at ? ` ended=${run.ended_at}` : ""}`
+        `  ${run.run_id} status=${run.status} started=${run.started_at}${run.ended_at ? ` ended=${run.ended_at}` : ""}${run.control_error ? ` control_error=${run.control_error.code}` : ""}`
       );
+      if (run.control_error) {
+        lines.push(`    ${run.control_error.message}`);
+      }
     }
     lines.push("");
   }

@@ -24,6 +24,7 @@ class ConformanceFakeAdapter(AgentAdapter):
             "conformance.static_echo",
             "conformance.probe_echo",
             "conformance.slow_cancel",
+            "conformance.slow_ignore_cancel",
             "conformance.interactive_choice",
             "conformance.interactive_form",
             "conformance.interactive_timeout",
@@ -70,6 +71,24 @@ class ConformanceFakeAdapter(AgentAdapter):
         interaction=None,
     ) -> dict[str, Any]:
         self.validate(command, args)
+
+        if command == "conformance.slow_ignore_cancel":
+            iterations = int(args.get("iterations", 400))
+            for index in range(iterations):
+                emitter.emit("log", message=f"ignore tick {index}: {args['message']}")
+                emitter.emit(
+                    "progress.updated",
+                    progress=min(0.99, (index + 1) / iterations),
+                    message=f"ignore tick {index}",
+                )
+                time.sleep(0.05)
+            emitter.emit("action.succeeded", message="should not reach success")
+            return {
+                "blocks": [
+                    markdown_block("# Should not finish", title="result"),
+                ]
+            }
+
         cancel_flag.check("execute")
 
         if command == "conformance.interactive_choice":

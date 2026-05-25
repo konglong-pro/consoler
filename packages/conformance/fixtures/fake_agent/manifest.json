@@ -45,6 +45,26 @@
       "permissions": []
     },
     {
+      "name": "conformance.slow_ignore_cancel",
+      "description": "Slow loop that ignores cancel for force-kill conformance.",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string", "minLength": 1 }
+        }
+      },
+      "preview_policy": {
+        "preview_kind": "static",
+        "requires_approval_before_preview": false,
+        "preview_side_effects": [],
+        "invalidates_on_context_change": false
+      },
+      "side_effects": [],
+      "permissions": []
+    },
+    {
       "name": "conformance.slow_cancel",
       "description": "Slow loop for cooperative cancel conformance.",
       "args_schema": {

@@ -26,6 +26,8 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Conformance harness: `pnpm test:conformance`
 - Compiled agentctl smoke: `pnpm test:agentctl-smoke` (after `pnpm build`)
 - V1l redaction smoke: `pnpm test:redaction-smoke` (after `pnpm build`)
+- V1 release gate: `pnpm test:v1-release-gate`
+- Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
 - Single package test: `pnpm --filter @consoler/protocol test`
 - TUI package test: `pnpm --filter @consoler/tui test`
@@ -64,6 +66,11 @@ Prefer narrow validation for the changed package before broad checks.
 - V1j agentctl run live interactions: start in `docs/planning/v1j-agentctl-run-live-interactions.md`; wire live `interaction.required` handling into `agentctl run` without protocol, SDK, TUI, or real indbase changes.
 - V1k interaction timeout policy: start in `docs/planning/v1k-interaction-timeout-policy.md`; add runtime-owned timeout policy for `interaction.required` without real indbase, redaction, multi-pending, strong epoch, or force-kill changes.
 - V1l interaction response redaction: start in `docs/planning/v1l-interaction-response-redaction.md`; add opt-in trace persistence redaction for top-level object fields without real indbase or retroactive database rewrites.
+- V1m real indbase interaction adoption: start in `docs/planning/v1m-real-indbase-interaction-adoption.md`; wire existing interaction support into real `indbase.ingest_file` duplicate handling without protocol, runtime, SDK, or TUI expansion.
+- V1n strong runtime control: start in `docs/planning/v1n-strong-runtime-control.md`; add runtime-only action lock, cancel timeout, force-kill fallback, and post-cancel event quarantine while keeping `epoch=0` and no synthetic terminal events.
+- V1o real indbase cooperative cancel: start in `docs/planning/v1o-real-indbase-cooperative-cancel.md`; pass cooperative cancel checkpoints into real `indbase.ingest_file` pipeline without consoler protocol/runtime/TUI/SDK changes.
+- V1p stabilization release gate: start in `docs/planning/v1p-v1-stabilization-release-gate.md`; close V1 with a release-gate script, acceptance matrix, and CI coverage without adding protocol/runtime/TUI features.
+- V1q real indbase local smokes: start in `docs/planning/v1q-real-indbase-local-smokes.md`; stabilize local disposable-vault smokes without adding default CI or protocol/runtime/TUI/SDK behavior.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -174,6 +181,45 @@ Prefer narrow validation for the changed package before broad checks.
   5. Verify trace JSON/text/TUI show redacted values plus `redacted_paths`, while replay remains response-free; result blocks must not echo secret plaintext.
   6. Run focused protocol/runtime/conformance/agentctl/TUI/Python SDK checks, root conformance, `pnpm test:redaction-smoke`, agentctl smoke, typecheck, build, and root test.
 
+- Real indbase interaction adoption:
+  1. Read `docs/planning/v1m-real-indbase-interaction-adoption.md`.
+  2. Keep changes real-agent focused in `E:\indbase`; do not change consoler protocol, runtime, SDK, TUI, or conformance fake unless an existing contract test fails.
+  3. Use existing `probe_ingest_file` duplicate data before write-oriented ingest execution.
+  4. Treat duplicate `skip` as `action.succeeded` business output, not failure or cancellation.
+  5. Do not add timeout, redaction, multi-pending, strong epoch, force-kill, folder ingest, or execution replay behavior.
+  6. Run `uv run pytest tests/test_indbase_agent.py` from `E:\indbase`, focused consoler protocol/runtime/agentctl/TUI/Python SDK/conformance checks, typecheck, build, root test, and disposable-vault `agentctl run` smokes for `skip` and `continue`.
+
+- Strong runtime control change:
+  1. Read `docs/planning/v1n-strong-runtime-control.md`.
+  2. Keep `ActionEvent.epoch` fixed at `0`; do not change protocol schemas or introduce `system.*` events.
+  3. Runtime may force-kill after cancel timeout, but must close the run as `failed` with `control_error=cancel_timeout` and must not synthesize `action.cancelled`.
+  4. After cancel is requested, only agent-emitted `action.cancelled` may be accepted; other valid agent events should be rejected into trace.
+  5. Do not edit `E:\indbase`, Python SDK cancel checkpoints, live TUI cancel behavior, interaction timeout policy, or execution replay.
+  6. Run focused runtime/conformance/agentctl/TUI/Python SDK checks, root conformance, cooperative and timeout cancel smokes, typecheck, build, root test, and agentctl smoke.
+
+- Real indbase cooperative cancel change:
+  1. Read `docs/planning/v1o-real-indbase-cooperative-cancel.md`.
+  2. Keep changes focused on real `indbase.ingest_file`; do not expand to doctor, folder ingest, URL ingest, media ingest, or rollback.
+  3. Add a backward-compatible optional checkpoint hook in `E:\indbase` ingest pipeline; do not make `indbase_core` import `consoler_agent_sdk`.
+  4. Ensure checkpoint-observed cancellation re-raises to the SDK so the agent emits `action.cancelled`; do not synthesize terminal events.
+  5. Do not change consoler protocol schemas, runtime control semantics, TUI live cancel behavior, Python SDK checkpoints, conformance fake behavior, or execution replay.
+  6. Run focused `E:\indbase` adapter/pipeline cancel tests, focused consoler runtime/agentctl/TUI/Python SDK/conformance checks, typecheck, build, and root test. Treat real `agentctl` cancel smoke as optional unless it can be made deterministic with a disposable fixture.
+
+- V1 stabilization release gate change:
+  1. Read `docs/planning/v1p-v1-stabilization-release-gate.md` and `docs/testing/v1-release-gate.md`.
+  2. Do not add new protocol, runtime, SDK, TUI, or real `E:\indbase` behavior.
+  3. Keep default CI fake-agent based; do not require real `E:\indbase`, real vaults, local paths, or timing-sensitive real-agent smokes.
+  4. Ensure Linux CI runs `pnpm test:v1-release-gate`, including redaction smoke.
+  5. Keep Windows CI focused on runtime, agentctl, Python SDK, and agentctl smoke.
+  6. Run `pnpm test:v1-release-gate` and `git diff --check`.
+
+- Real indbase local smoke change:
+  1. Read `docs/planning/v1q-real-indbase-local-smokes.md` and `docs/testing/real-indbase-smokes.md`.
+  2. Use temp `CONSOLER_ROOT`, temp args/responses, and disposable vaults only.
+  3. Do not add default CI requirements for `E:\indbase`, real vaults, or timing-sensitive real-agent cancellation.
+  4. Prove doctor, normal ingest, duplicate skip, duplicate continue, real cooperative cancel focused tests, and fake-agent timeout fallback.
+  5. Run `pnpm test:real-indbase-smoke`, `pnpm test:v1-release-gate`, and `git diff --check`.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/` once that package exists.
   2. Verify behavior against recorded event replay.
@@ -200,6 +246,11 @@ Prefer narrow validation for the changed package before broad checks.
 - V1j makes `agentctl run` a live interaction client, but the runtime still owns interaction validation, response routing, persistence, and terminal state.
 - V1k interaction timeouts are runtime-owned; timeout abort is an action failure, while skip/continue are explicit agent-visible timeout results.
 - V1l interaction redaction protects persisted trace/history data only; it must not change the live response delivered to the agent process.
+- V1m real indbase interactions must reuse the existing interaction protocol; duplicate `skip` is a successful business result and must not run the write-oriented ingest pipeline.
+- V1n strong runtime control remains protocol-compatible: `epoch` stays `0`; runtime force-kill records a run-level failed control error and must not create fake terminal events.
+- V1o real indbase cooperative cancel is a real-agent adoption step: `indbase.ingest_file` may add pipeline checkpoints, but consoler protocol/runtime/TUI/SDK semantics remain unchanged.
+- V1p closes V1 feature work; new protocol/runtime/TUI capabilities should start a later version plan.
+- V1q real indbase smokes are local-only disposable-vault checks; they must not become default CI without a provisioned real-agent environment.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -227,6 +278,14 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1j-agentctl-run-live-interactions.md`: `agentctl run` live interaction execution brief.
 - `docs/planning/v1k-interaction-timeout-policy.md`: runtime-owned interaction timeout policy brief.
 - `docs/planning/v1l-interaction-response-redaction.md`: opt-in persisted interaction response redaction brief.
+- `docs/planning/v1m-real-indbase-interaction-adoption.md`: real `indbase.ingest_file` duplicate interaction adoption brief.
+- `docs/planning/v1n-strong-runtime-control.md`: runtime-only action lock, cancel timeout, and force-kill fallback brief.
+- `docs/planning/v1o-real-indbase-cooperative-cancel.md`: real `indbase.ingest_file` pipeline checkpoint adoption brief.
+- `docs/planning/v1p-v1-stabilization-release-gate.md`: V1 stabilization and release gate execution brief.
+- `docs/testing/v1-release-gate.md`: V1 acceptance matrix, CI gates, local-only smokes, and V2+ exclusions.
+- `docs/planning/v1q-real-indbase-local-smokes.md`: local-only real indbase disposable smoke execution brief.
+- `docs/testing/real-indbase-smokes.md`: command and coverage for local real indbase smoke runs.
+- `docs/testing/v1-closeout.md`: V1 frozen surface, validation evidence, and V2 entry criteria.
 
 ## Done Means
 

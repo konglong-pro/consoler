@@ -50,6 +50,12 @@ export interface InteractionTraceRecord {
   redacted_paths: string[];
 }
 
+export interface RunControlErrorSummary {
+  code: string;
+  message: string;
+  at: string | null;
+}
+
 export interface ActionRunSummary {
   run_id: string;
   action_id: string;
@@ -58,6 +64,7 @@ export interface ActionRunSummary {
   status: string;
   started_at: string;
   ended_at: string | null;
+  control_error: RunControlErrorSummary | null;
 }
 
 export interface RejectedEventRecord {
@@ -83,5 +90,6 @@ export interface ActionTrace {
   result_blocks: RenderableBlock[];
   terminal_state: ActionHistoryStatus | null;
   latest_run_id: string | null;
+  latest_run_control_error: RunControlErrorSummary | null;
   interactions: InteractionTraceRecord[];
 }

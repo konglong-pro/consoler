@@ -41,6 +41,8 @@ const TIMEOUT_COMMANDS = new Set(["conformance.interactive_timeout"]);
 
 const REDACTION_COMMANDS = new Set(["conformance.interactive_redaction"]);
 
+const IGNORE_CANCEL_COMMAND = "conformance.slow_ignore_cancel";
+
 const REDACTION_DEFAULT_SECRET = "default-secret";
 
 function sha256Hex(value: string): string {
@@ -226,6 +228,7 @@ async function runCommandChecks(
     approvePreview?: boolean;
     approve?: boolean;
     cancelAfterMs?: number;
+    cancelTimeoutMs?: number;
     interactionResponse?: unknown;
   }
 ): Promise<ConformanceCheck[]> {
@@ -387,6 +390,23 @@ async function runCommandChecks(
   }
 
   if (options.cancelAfterMs !== undefined) {
+    if (command === IGNORE_CANCEL_COMMAND) {
+      if (options.cancelTimeoutMs === undefined) {
+        checks.push(
+          check(
+            "command.cancel_timeout_mode",
+            "Cancel timeout mode",
+            "failed",
+            `${IGNORE_CANCEL_COMMAND} requires cancelTimeoutMs`
+          )
+        );
+        return checks;
+      }
+      return [
+        ...checks,
+        ...(await runCancelTimeoutExecuteChecks(runtime, prepared, options.cancelAfterMs))
+      ];
+    }
     return [...checks, ...(await runCancelExecuteChecks(runtime, prepared, options.cancelAfterMs))];
   }
 
@@ -736,18 +756,17 @@ async function runCancelExecuteChecks(
     )
   );
 
-  if (trace.rejected_events.length > 0) {
-    checks.push(
-      check(
-        "cancel.no_rejected",
-        "No rejected events",
-        "failed",
-        `${trace.rejected_events.length} rejected event(s)`
-      )
-    );
-  } else {
-    checks.push(check("cancel.no_rejected", "No rejected events", "passed", "0 rejected"));
-  }
+  const quarantined = trace.rejected_events.filter(
+    (row) => row.reject_reason === "cancel_requested"
+  );
+  checks.push(
+    check(
+      "cancel.quarantine",
+      "Post-cancel events quarantined",
+      quarantined.length > 0 ? "passed" : "failed",
+      `${quarantined.length} rejected with cancel_requested`
+    )
+  );
 
   const history = runtime.listActionHistory({ limit: 20 });
   const row = history.find((entry) => entry.action_id === actionId);
@@ -767,6 +786,149 @@ async function runCancelExecuteChecks(
       "Replay accepted-only",
       replay.events.length === trace.accepted_events.length ? "passed" : "failed",
       `replay=${replay.events.length} trace=${trace.accepted_events.length}`
+    )
+  );
+
+  return checks;
+}
+
+async function runCancelTimeoutExecuteChecks(
+  runtime: ConsolerRuntime,
+  prepared: Awaited<ReturnType<ConsolerRuntime["prepareAction"]>>,
+  cancelAfterMs: number
+): Promise<ConformanceCheck[]> {
+  const checks: ConformanceCheck[] = [];
+  const accepted: ActionEvent[] = [];
+  const rejected: Array<{ type: string; reason: string | null }> = [];
+  let control: PreparedExecutionControl;
+
+  try {
+    control = runtime.executePreparedWithControl(prepared, {
+      onEvent: (event: ActionEvent, ingest: { accepted: boolean; reason?: string }) => {
+        if (ingest.accepted) {
+          accepted.push(event);
+        } else {
+          rejected.push({ type: event.type, reason: ingest.reason ?? null });
+        }
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    return checks;
+  }
+
+  await sleep(cancelAfterMs);
+
+  try {
+    const first = (await control.cancel()) as Record<string, unknown>;
+    const second = (await control.cancel()) as Record<string, unknown>;
+    checks.push(
+      check(
+        "cancel.agent_response",
+        "agent.cancel response",
+        first["status"] === "cancel_requested" ? "passed" : "failed",
+        String(first["status"] ?? "missing status")
+      )
+    );
+    checks.push(
+      check(
+        "cancel.idempotent",
+        "Idempotent cancel",
+        second["status"] === "cancel_requested" || second["status"] === "noop" ? "passed" : "failed",
+        `first=${String(first["status"])} second=${String(second["status"])}`
+      )
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("cancel.agent_response", "agent.cancel response", "failed", message));
+    control.close();
+    return checks;
+  }
+
+  let terminal: Awaited<ReturnType<ConsolerRuntime["executePrepared"]>>;
+  try {
+    terminal = await control.done;
+    checks.push(
+      check("command.execute", "Execute", "passed", `terminal=${terminal.state}`)
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    checks.push(check("command.execute", "Execute", "failed", message));
+    control.close();
+    return checks;
+  } finally {
+    control.close();
+  }
+
+  checks.push(
+    check(
+      "cancel.timeout_terminal_state",
+      "Force-kill failed terminal",
+      terminal.state === "failed" ? "passed" : "failed",
+      `terminal=${terminal.state}`
+    )
+  );
+
+  checks.push(
+    check(
+      "cancel.timeout_control_error",
+      "Cancel timeout control error",
+      terminal.control_error?.code === "cancel_timeout" ? "passed" : "failed",
+      terminal.control_error?.code ?? "missing control_error"
+    )
+  );
+
+  const hasCancelledEvent = accepted.some((event) => event.type === "action.cancelled");
+  checks.push(
+    check(
+      "cancel.timeout_no_cancelled_event",
+      "No synthetic action.cancelled",
+      hasCancelledEvent ? "failed" : "passed",
+      hasCancelledEvent ? "action.cancelled present" : "no action.cancelled"
+    )
+  );
+
+  const quarantined = rejected.filter((row) => row.reason === "cancel_requested");
+  checks.push(
+    check(
+      "cancel.timeout_quarantine",
+      "Post-cancel events quarantined",
+      quarantined.length > 0 ? "passed" : "failed",
+      `${quarantined.length} rejected with cancel_requested`
+    )
+  );
+
+  const actionId = prepared.action.action_id;
+  const trace = runtime.getActionTrace(actionId);
+  checks.push(
+    check(
+      "cancel.timeout_trace_terminal",
+      "Trace failed terminal",
+      trace.terminal_state === "failed" ? "passed" : "failed",
+      `terminal_state=${trace.terminal_state ?? "none"}`
+    )
+  );
+
+  checks.push(
+    check(
+      "cancel.timeout_trace_control_error",
+      "Trace control error",
+      trace.latest_run_control_error?.code === "cancel_timeout" ? "passed" : "failed",
+      trace.latest_run_control_error?.code ?? "missing"
+    )
+  );
+
+  const replay = runtime.getReplay(actionId);
+  const hasFakeTerminal = replay.events.some((event) =>
+    ["action.succeeded", "action.failed", "action.cancelled"].includes(event.type)
+  );
+  checks.push(
+    check(
+      "cancel.timeout_replay",
+      "Replay has no fake terminal",
+      !hasFakeTerminal ? "passed" : "failed",
+      hasFakeTerminal ? "unexpected terminal event in replay" : "no terminal events"
     )
   );
 
@@ -1050,7 +1212,10 @@ export async function runAgentConformance(
   }
 
   const checks: ConformanceCheck[] = [];
-  const runtime = new ConsolerRuntime({ rootDir });
+  const runtime = new ConsolerRuntime({
+    rootDir,
+    ...(input.cancelTimeoutMs !== undefined ? { cancelTimeoutMs: input.cancelTimeoutMs } : {})
+  });
   let report: ConformanceReport;
 
   try {
@@ -1108,6 +1273,7 @@ export async function runAgentConformance(
               ...(input.approvePreview ? { approvePreview: true } : {}),
               ...(input.approve ? { approve: true } : {}),
               ...(input.cancelAfterMs !== undefined ? { cancelAfterMs: input.cancelAfterMs } : {}),
+              ...(input.cancelTimeoutMs !== undefined ? { cancelTimeoutMs: input.cancelTimeoutMs } : {}),
               ...(input.interactionResponse !== undefined
                 ? { interactionResponse: input.interactionResponse }
                 : {})

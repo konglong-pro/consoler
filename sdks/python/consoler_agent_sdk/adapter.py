@@ -42,6 +42,7 @@ class AgentAdapter(ABC):
         run_id: str,
         emitter,
         cancel_flag,
+        interaction=None,
     ) -> dict[str, Any]:
         raise NotImplementedError
 

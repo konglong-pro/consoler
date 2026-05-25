@@ -46,6 +46,29 @@ describe("conformance harness", () => {
     expect(report.passed).toBe(true);
   });
 
+  it("force-kills ignore-cancel command after cancel timeout", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.slow_ignore_cancel",
+      args: { message: "timeout-me" },
+      approve: true,
+      cancelAfterMs: 100,
+      cancelTimeoutMs: 300,
+      cleanupTempRoot: true
+    });
+
+    expect(report.checks.find((row) => row.id === "cancel.timeout_terminal_state")?.status).toBe(
+      "passed"
+    );
+    expect(report.checks.find((row) => row.id === "cancel.timeout_control_error")?.status).toBe(
+      "passed"
+    );
+    expect(report.checks.find((row) => row.id === "cancel.timeout_quarantine")?.status).toBe(
+      "passed"
+    );
+  });
+
   it("cancels slow command and verifies cancelled terminal", async () => {
     const report = await runAgentConformance({
       agentId: FAKE_AGENT_ID,
@@ -58,6 +81,7 @@ describe("conformance harness", () => {
     expect(report.passed).toBe(true);
     expect(report.checks.find((row) => row.id === "cancel.terminal_state")?.status).toBe("passed");
     expect(report.checks.find((row) => row.id === "cancel.no_succeeded")?.status).toBe("passed");
+    expect(report.checks.find((row) => row.id === "cancel.quarantine")?.status).toBe("passed");
     expect(report.checks.find((row) => row.id === "cancel.history_status")?.status).toBe("passed");
   });
 

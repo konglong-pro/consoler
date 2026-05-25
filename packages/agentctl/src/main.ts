@@ -162,6 +162,10 @@ program
     "Request cooperative cancel after N ms (requires --command --args --approve)"
   )
   .option(
+    "--cancel-timeout-ms <n>",
+    "Runtime cancel timeout before force-kill (requires --cancel-after-ms)"
+  )
+  .option(
     "--interaction-response <path>",
     "JSON file with pre-seeded interaction response (interactive conformance commands)"
   )
@@ -176,6 +180,7 @@ program
         approvePreview?: boolean;
         approve?: boolean;
         cancelAfterMs?: string;
+        cancelTimeoutMs?: string;
         interactionResponse?: string;
         json?: boolean;
       }
@@ -222,6 +227,23 @@ program
       const cancelAfterMs =
         options.cancelAfterMs !== undefined ? Number(options.cancelAfterMs) : undefined;
 
+      if (options.cancelTimeoutMs !== undefined) {
+        if (cancelAfterMs === undefined) {
+          console.error("--cancel-timeout-ms requires --cancel-after-ms");
+          process.exitCode = 1;
+          return;
+        }
+        const parsedTimeout = Number(options.cancelTimeoutMs);
+        if (!Number.isFinite(parsedTimeout) || parsedTimeout < 1) {
+          console.error("--cancel-timeout-ms must be a positive number");
+          process.exitCode = 1;
+          return;
+        }
+      }
+
+      const cancelTimeoutMs =
+        options.cancelTimeoutMs !== undefined ? Number(options.cancelTimeoutMs) : undefined;
+
       let interactionResponse: unknown | undefined;
       if (options.interactionResponse) {
         interactionResponse = loadJsonValue(options.interactionResponse);
@@ -235,6 +257,7 @@ program
         approvePreview: Boolean(options.approvePreview),
         approve: Boolean(options.approve),
         ...(cancelAfterMs !== undefined ? { cancelAfterMs } : {}),
+        ...(cancelTimeoutMs !== undefined ? { cancelTimeoutMs } : {}),
         ...(interactionResponse !== undefined ? { interactionResponse } : {}),
         cleanupTempRoot: true
       });

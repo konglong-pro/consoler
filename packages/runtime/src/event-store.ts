@@ -13,7 +13,13 @@ export type EventRejectReason =
   | "duplicate_seq"
   | "wrong_run"
   | "stale_post_terminal"
+  | "cancel_requested"
   | "missing_identity";
+
+export interface EventIngestOptions {
+  /** After cancel is requested, only action.cancelled may be accepted. */
+  cancelQuarantine?: boolean;
+}
 
 export interface EventIngestResult {
   accepted: boolean;
@@ -29,7 +35,8 @@ export class EventStore {
     actionId: string,
     agentId: string,
     command: string,
-    rawEvent: unknown
+    rawEvent: unknown,
+    options: EventIngestOptions = {}
   ): EventIngestResult {
     const now = new Date().toISOString();
     const validated = validateActionEvent(rawEvent);
@@ -55,6 +62,9 @@ export class EventStore {
     }
 
     const event = validated.value!;
+    if (options.cancelQuarantine && event.type !== "action.cancelled") {
+      return this.reject(event, "cancel_requested", now);
+    }
     if (event.type === "interaction.required" && event.interaction) {
       const timeoutError = validateInteractionTimeoutPolicy(event.interaction);
       if (timeoutError) {

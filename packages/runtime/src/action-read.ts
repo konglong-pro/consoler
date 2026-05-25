@@ -9,7 +9,8 @@ import type {
   ActionTrace,
   InteractionTraceRecord,
   ListActionHistoryOptions,
-  RejectedEventRecord
+  RejectedEventRecord,
+  RunControlErrorSummary
 } from "./action-read-types.js";
 import type { ConsolerStore, StoredEvent, StoredInteraction } from "./db/store.js";
 import { parseRedactedPathsJson } from "./interaction-redaction.js";
@@ -52,6 +53,29 @@ export function terminalStateFromAcceptedEvents(events: ActionEvent[]): ActionHi
     if (event.type === "action.cancelled") return "cancelled";
   }
   return null;
+}
+
+export function terminalStateFromRunStatus(status: string | null): ActionHistoryStatus | null {
+  if (!status || status === "running") return null;
+  if (status === "succeeded" || status === "failed" || status === "cancelled") {
+    return status;
+  }
+  return null;
+}
+
+function toRunControlError(run: {
+  control_error_code: string | null;
+  control_error_message: string | null;
+  control_error_at: string | null;
+}): RunControlErrorSummary | null {
+  if (!run.control_error_code || !run.control_error_message) {
+    return null;
+  }
+  return {
+    code: run.control_error_code,
+    message: run.control_error_message,
+    at: run.control_error_at
+  };
 }
 
 export function resultBlocksFromEvents(events: ActionEvent[]): RenderableBlock[] {
@@ -118,9 +142,10 @@ export function listActionHistory(
 
     const counts = store.countEventsForAction(row.action_id);
     const terminalState = row.latest_run_id
-      ? terminalStateFromAcceptedEvents(
+      ? (terminalStateFromAcceptedEvents(
           store.listAcceptedEventsForRun(row.latest_run_id)
-        )
+        ) ??
+        terminalStateFromRunStatus(row.latest_run_status))
       : null;
 
     entries.push({
@@ -161,7 +186,8 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
       command: run.command,
       status: run.status,
       started_at: run.started_at,
-      ended_at: run.ended_at
+      ended_at: run.ended_at,
+      control_error: toRunControlError(run)
     })
   );
 
@@ -180,9 +206,11 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
   }
 
   const timeline = replayAction(store, actionId);
-  const terminal_state = timeline.run_id
-    ? terminalStateFromAcceptedEvents(timeline.events)
-    : null;
+  const latestRunRow = runs[0] ?? null;
+  const terminal_state =
+    (timeline.run_id ? terminalStateFromAcceptedEvents(timeline.events) : null) ??
+    terminalStateFromRunStatus(latestRunRow?.status ?? null);
+  const latest_run_control_error = latestRunRow ? latestRunRow.control_error : null;
 
   return {
     action,
@@ -195,6 +223,7 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
     result_blocks: resultBlocksFromEvents(accepted_events),
     terminal_state,
     latest_run_id: timeline.run_id,
+    latest_run_control_error,
     interactions: store.listInteractionsForAction(actionId).map(toInteractionTraceRecord)
   };
 }

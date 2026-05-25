@@ -10,6 +10,11 @@ export function TracePanel({ trace }: { trace: ActionTrace }) {
       <Text bold>Trace — {trace.action.command}</Text>
       <Text>action_id: {trace.action.action_id}</Text>
       <Text dimColor>status: {trace.terminal_state ?? "prepared"}</Text>
+      {trace.latest_run_control_error ? (
+        <Text color="red">
+          control_error: {trace.latest_run_control_error.code} — {trace.latest_run_control_error.message}
+        </Text>
+      ) : null}
 
       <Box marginTop={1} flexDirection="column">
         <Text bold>Args</Text>

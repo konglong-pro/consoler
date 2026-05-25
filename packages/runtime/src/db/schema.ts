@@ -113,3 +113,9 @@ ALTER TABLE interactions ADD COLUMN timeout_outcome TEXT;
 export const INTERACTIONS_REDACTION_MIGRATION_SQL = `
 ALTER TABLE interactions ADD COLUMN redacted_paths_json TEXT;
 `;
+
+export const RUNS_CONTROL_ERROR_MIGRATION_SQL = `
+ALTER TABLE runs ADD COLUMN control_error_code TEXT;
+ALTER TABLE runs ADD COLUMN control_error_message TEXT;
+ALTER TABLE runs ADD COLUMN control_error_at TEXT;
+`;
