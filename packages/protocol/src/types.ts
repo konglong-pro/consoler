@@ -80,12 +80,28 @@ export interface AgentCommand {
   permissions: Permission[];
 }
 
+export interface ArtifactRetrievalCapability {
+  uri_schemes: string[];
+  kinds: string[];
+}
+
 export interface AgentManifest {
   agent_id: string;
   name: string;
   version: string;
   protocol_version: string;
   commands: AgentCommand[];
+  artifact_retrieval?: ArtifactRetrievalCapability;
+}
+
+export interface ArtifactView {
+  artifact_uri: string;
+  kind: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  truncated?: boolean;
+  truncation_reason?: string;
+  blocks: RenderableBlock[];
 }
 
 export interface ActionDraft {

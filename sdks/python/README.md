@@ -15,12 +15,14 @@ Registry entries set `PYTHONPATH` to this directory (see `.consoler/agents.json`
 
 ## Tests
 
-From consoler root (sets `PYTHONPATH` for the SDK import path):
+From consoler root:
 
 ```powershell
 cd E:\consoler
-$env:PYTHONPATH = "E:\consoler\sdks\python"
 pnpm test:python-sdk
 ```
+
+`pnpm test:python-sdk` prefers `uv run --directory sdks/python --with pytest` when `uv` is on PATH.
+Otherwise it uses `scripts/resolve-python.mjs` and installs `pytest` with `pip` if needed (same expectation as CI).
 
 `indbase_agent` adapter tests live in `E:\indbase\tests\test_indbase_agent.py`.

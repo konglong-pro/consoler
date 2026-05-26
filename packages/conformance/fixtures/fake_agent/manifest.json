@@ -3,6 +3,10 @@
   "name": "Conformance Fake Agent",
   "version": "0.0.1",
   "protocol_version": "0",
+  "artifact_retrieval": {
+    "uri_schemes": ["fake"],
+    "kinds": ["conformance.fixture"]
+  },
   "commands": [
     {
       "name": "conformance.static_echo",

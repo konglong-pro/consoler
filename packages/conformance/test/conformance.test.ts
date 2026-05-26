@@ -100,6 +100,12 @@ describe("conformance harness", () => {
     expect(
       report.checks.find((row) => row.id === "execution.replay_block_summaries")?.status
     ).toBe("passed");
+    expect(report.checks.find((row) => row.id === "execution.artifact_retrieval")?.status).toBe(
+      "passed"
+    );
+    expect(
+      report.checks.find((row) => row.id === "execution.artifact_retrieval_audit")?.status
+    ).toBe("passed");
   });
 
   it("executes probe command with dual approval and verifies replay", async () => {

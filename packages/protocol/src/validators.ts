@@ -3,10 +3,11 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 
 import agentErrorSchema from "./schemas/agent-error.json" with { type: "json" };
 import actionEventSchema from "./schemas/action-event.json" with { type: "json" };
+import artifactViewSchema from "./schemas/artifact-view.json" with { type: "json" };
 import interactionRequestSchema from "./schemas/interaction-request.json" with { type: "json" };
 import manifestSchema from "./schemas/manifest.json" with { type: "json" };
 import renderableBlockSchema from "./schemas/renderable-block.json" with { type: "json" };
-import type { ActionEvent, AgentManifest, RenderableBlock } from "./types.js";
+import type { ActionEvent, AgentManifest, ArtifactView, RenderableBlock } from "./types.js";
 
 export interface ValidationResult<T> {
   ok: boolean;
@@ -27,6 +28,7 @@ function createAjv() {
   ajv.addSchema(interactionRequestSchema);
   ajv.addSchema(actionEventSchema);
   ajv.addSchema(manifestSchema);
+  ajv.addSchema(artifactViewSchema);
   return ajv;
 }
 
@@ -36,6 +38,9 @@ const validateManifestFn = ajv.getSchema("https://consoler.dev/schemas/v0/manife
 const validateActionEventFn = ajv.getSchema("https://consoler.dev/schemas/v0/action-event.json") as ValidateFunction;
 const validateRenderableBlockFn = ajv.getSchema(
   "https://consoler.dev/schemas/v0/renderable-block.json"
+) as ValidateFunction;
+const validateArtifactViewFn = ajv.getSchema(
+  "https://consoler.dev/schemas/v0/artifact-view.json"
 ) as ValidateFunction;
 
 export function validateManifest(data: unknown): ValidationResult<AgentManifest> {
@@ -48,6 +53,10 @@ export function validateActionEvent(data: unknown): ValidationResult<ActionEvent
 
 export function validateRenderableBlock(data: unknown): ValidationResult<RenderableBlock> {
   return runValidator(validateRenderableBlockFn, data);
+}
+
+export function validateArtifactView(data: unknown): ValidationResult<ArtifactView> {
+  return runValidator(validateArtifactViewFn, data);
 }
 
 export function validateCommandArgs(

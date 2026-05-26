@@ -27,6 +27,8 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Compiled agentctl smoke: `pnpm test:agentctl-smoke` (after `pnpm build`)
 - V1l redaction smoke: `pnpm test:redaction-smoke` (after `pnpm build`)
 - V1 release gate: `pnpm test:v1-release-gate`
+- V2 release gate: `pnpm test:v2-release-gate`
+- Artifact retrieval smoke: `pnpm test:artifact-retrieval-smoke`
 - Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
 - Single package test: `pnpm --filter @consoler/protocol test`
@@ -71,6 +73,10 @@ Prefer narrow validation for the changed package before broad checks.
 - V1o real indbase cooperative cancel: start in `docs/planning/v1o-real-indbase-cooperative-cancel.md`; pass cooperative cancel checkpoints into real `indbase.ingest_file` pipeline without consoler protocol/runtime/TUI/SDK changes.
 - V1p stabilization release gate: start in `docs/planning/v1p-v1-stabilization-release-gate.md`; close V1 with a release-gate script, acceptance matrix, and CI coverage without adding protocol/runtime/TUI features.
 - V1q real indbase local smokes: start in `docs/planning/v1q-real-indbase-local-smokes.md`; stabilize local disposable-vault smokes without adding default CI or protocol/runtime/TUI/SDK behavior.
+- V2a protocol contract: start in `docs/planning/v2a-artifact-retrieval-protocol-contract.md`; add artifact retrieval manifest capability and `ArtifactView` validation before runtime work.
+- V2a artifact retrieval CLI loop: start in `docs/planning/v2a-artifact-retrieval-cli-loop.md`; implement runtime retrieval, audit, SDK/fake-agent support, conformance, and `agentctl artifact-view` without TUI or real indbase.
+- V2a artifact retrieval / browser: start in `docs/planning/v2a-artifact-retrieval-browser.md`; add generic agent-owned artifact viewing before natural language mapping.
+- V2b artifact browser / real-agent adoption: start in `docs/planning/v2b-artifact-browser-real-adoption.md`; wire TUI `artifact_view` + real `indbase` `get_artifact_view` on completed V2a `fetchArtifactView` without NL mapping.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -209,7 +215,7 @@ Prefer narrow validation for the changed package before broad checks.
   1. Read `docs/planning/v1p-v1-stabilization-release-gate.md` and `docs/testing/v1-release-gate.md`.
   2. Do not add new protocol, runtime, SDK, TUI, or real `E:\indbase` behavior.
   3. Keep default CI fake-agent based; do not require real `E:\indbase`, real vaults, local paths, or timing-sensitive real-agent smokes.
-  4. Ensure Linux CI runs `pnpm test:v1-release-gate`, including redaction smoke.
+  4. Ensure Linux CI runs `pnpm test:v2-release-gate` (or `pnpm test:v1-release-gate` for V1-only changes), including redaction and artifact retrieval smokes.
   5. Keep Windows CI focused on runtime, agentctl, Python SDK, and agentctl smoke.
   6. Run `pnpm test:v1-release-gate` and `git diff --check`.
 
@@ -220,11 +226,44 @@ Prefer narrow validation for the changed package before broad checks.
   4. Prove doctor, normal ingest, duplicate skip, duplicate continue, real cooperative cancel focused tests, and fake-agent timeout fallback.
   5. Run `pnpm test:real-indbase-smoke`, `pnpm test:v1-release-gate`, and `git diff --check`.
 
+- Artifact retrieval protocol contract change:
+  1. Read `docs/planning/v2a-artifact-retrieval-protocol-contract.md` and `docs/adr/0002-agent-owned-artifact-retrieval.md`.
+  2. Keep the change inside `packages/protocol`; do not edit runtime, agentctl, TUI, SDK, conformance fake, or real `E:\indbase`.
+  3. Add optional manifest capability and `ArtifactView` validation without bumping `protocol_version`.
+  4. Keep old manifests valid and reject nested artifact blocks in `ArtifactView.blocks`.
+  5. Run `pnpm --filter @consoler/protocol test`, `pnpm --filter @consoler/protocol typecheck`, `pnpm typecheck`, and `git diff --check`.
+
+- Artifact retrieval CLI loop change:
+  1. Read `docs/planning/v2a-artifact-retrieval-cli-loop.md`, `docs/planning/v2a-artifact-retrieval-browser.md`, and `docs/adr/0002-agent-owned-artifact-retrieval.md`.
+  2. Keep this phase to runtime, agentctl, Python SDK, conformance fake/harness, and tests; do not edit TUI or real `E:\indbase`.
+  3. Fetch artifacts only by accepted `action_id` + `block_id`; do not accept arbitrary URI input, rejected-event artifacts, or preview artifacts.
+  4. Persist retrieval attempt metadata only; do not store `ArtifactView` content, write events, change replay, or change action history status.
+  5. Use fake-agent conformance for the default path and keep real-agent adoption for a later local-only phase.
+  6. Run focused runtime, agentctl, conformance, Python SDK, root conformance, typecheck, build, root test, and `git diff --check`.
+
+- Artifact retrieval / browser change:
+  1. Read `docs/planning/v2a-artifact-retrieval-browser.md`.
+  2. Keep retrieval generic and agent-owned; consoler must not parse or dereference agent artifact URI schemes directly.
+  3. Retrieve only accepted artifact blocks by `action_id` and `block_id`; do not fetch rejected-event artifacts, preview artifacts, or arbitrary user-entered URIs.
+  4. Keep retrieval separate from Action lifecycle, approval tokens, event streams, replay, and artifact content storage.
+  5. Reject nested artifact blocks in `ArtifactView.blocks`; do not add downloads, media streaming, pagination, global artifact search, or natural language mapping.
+  6. Use conformance fake coverage for default tests and keep real `E:\indbase` artifact retrieval local-only.
+  7. Run focused protocol/runtime/agentctl/TUI/conformance/Python SDK checks, root conformance, typecheck, build, root test, `git diff --check`, and local real-agent retrieval smoke when validating `E:\indbase`.
+
+- Artifact browser / real-agent adoption change (V2b):
+  1. Read `docs/planning/v2b-artifact-browser-real-adoption.md`, `docs/planning/v2a-artifact-retrieval-cli-loop.md`, and `docs/adr/0002-agent-owned-artifact-retrieval.md`.
+  2. Reuse V2a `fetchArtifactView`; TUI `artifact_view` opens only on explicit Enter from finished result or trace.
+  3. Keep `indbase://...` parsing and vault/database reads inside `E:\indbase`; consoler must not import indbase business logic.
+  4. Do not add protocol changes, artifact content cache/storage, replay fetching, arbitrary URI fetch, downloads/media rendering, global artifact search, or natural language mapping.
+  5. Keep default CI fake-agent based; real `E:\indbase` retrieval is local-only.
+  6. Run focused TUI/runtime/agentctl/conformance/Python SDK checks, `uv run pytest tests/test_indbase_agent.py` from `E:\indbase`, typecheck, build, root test, `git diff --check`, and disposable `agentctl artifact-view` smoke.
+
 - TUI change:
-  1. Add or update focused tests under `packages/tui/` once that package exists.
+  1. Add or update focused tests under `packages/tui/`.
   2. Verify behavior against recorded event replay.
   3. Run `agentctl` lifecycle checks if runtime behavior changed.
   4. Do a manual TUI smoke for form -> approval -> live events -> result -> replay.
+  5. For artifact browsing, follow `docs/planning/v2b-artifact-browser-real-adoption.md` (Enter open, Esc back from `artifact_view`).
 
 ## Architecture Constraints
 
@@ -237,7 +276,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Execution output is a structured event stream. Do not treat logs as progress.
 - History, trace, and replay are read-only. They must not spawn agents or re-read vault/source state.
 - Conformance checks must use out-of-process agents and isolated temp runtime roots; they must not pollute the developer's `.consoler` store.
-- Artifact blocks are references in V1d; renderers must not read or resolve artifact `uri` values unless a newer planning doc changes scope.
+- Artifact blocks are references in V1d; consoler must not dereference `uri` values except through V2a+ `fetchArtifactView(action_id, block_id)` on explicit user action (TUI Enter or `agentctl artifact-view`).
 - V1e real agent artifact blocks use logical `indbase://...` references; they still do not grant consoler ownership of indbase artifact storage or file access.
 - V1f cancel is cooperative only: a cancel request is not a cancelled terminal state until the agent emits `action.cancelled`.
 - V1g TUI cancel sends only a cancel request; the TUI must wait for agent-emitted `action.cancelled` before showing a cancelled terminal state.
@@ -251,6 +290,8 @@ Prefer narrow validation for the changed package before broad checks.
 - V1o real indbase cooperative cancel is a real-agent adoption step: `indbase.ingest_file` may add pipeline checkpoints, but consoler protocol/runtime/TUI/SDK semantics remain unchanged.
 - V1p closes V1 feature work; new protocol/runtime/TUI capabilities should start a later version plan.
 - V1q real indbase smokes are local-only disposable-vault checks; they must not become default CI without a provisioned real-agent environment.
+- V2a artifact retrieval is a user-triggered read flow owned by the artifact-producing agent; it is not an Action, not replay, and not consoler-owned artifact storage.
+- V2b adds Ink `artifact_view` and real `indbase` `get_artifact_view`; consoler still calls only `fetchArtifactView(action_id, block_id)` and never stores retrieved content.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -264,6 +305,7 @@ Prefer narrow validation for the changed package before broad checks.
 ## Deep Context Index
 
 - `docs/adr/0001-agent-protocol-v0-boundaries.md`: accepted v0 architecture boundaries and non-goals.
+- `docs/adr/0002-agent-owned-artifact-retrieval.md`: V2a boundary for agent-owned artifact retrieval.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
@@ -283,9 +325,14 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1o-real-indbase-cooperative-cancel.md`: real `indbase.ingest_file` pipeline checkpoint adoption brief.
 - `docs/planning/v1p-v1-stabilization-release-gate.md`: V1 stabilization and release gate execution brief.
 - `docs/testing/v1-release-gate.md`: V1 acceptance matrix, CI gates, local-only smokes, and V2+ exclusions.
+- `docs/testing/v2-release-gate.md`: V2 fake-agent release gate, CI gates, and local-only real-agent exclusions.
 - `docs/planning/v1q-real-indbase-local-smokes.md`: local-only real indbase disposable smoke execution brief.
 - `docs/testing/real-indbase-smokes.md`: command and coverage for local real indbase smoke runs.
 - `docs/testing/v1-closeout.md`: V1 frozen surface, validation evidence, and V2 entry criteria.
+- `docs/planning/v2a-artifact-retrieval-protocol-contract.md`: protocol-only first step for V2a artifact retrieval.
+- `docs/planning/v2a-artifact-retrieval-cli-loop.md`: runtime, SDK/fake-agent, conformance, and `agentctl artifact-view` execution brief.
+- `docs/planning/v2a-artifact-retrieval-browser.md`: generic artifact retrieval and browser execution brief.
+- `docs/planning/v2b-artifact-browser-real-adoption.md`: TUI artifact browser and local-only real `indbase` retrieval adoption brief.
 
 ## Done Means
 

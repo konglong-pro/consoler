@@ -7,6 +7,7 @@ import type {
   ActionHistoryStatus,
   ActionRunSummary,
   ActionTrace,
+  ArtifactRetrievalTraceRecord,
   InteractionTraceRecord,
   ListActionHistoryOptions,
   RejectedEventRecord,
@@ -110,6 +111,22 @@ function toInteractionTraceRecord(row: StoredInteraction): InteractionTraceRecor
     timeout_triggered_at: row.timeout_triggered_at,
     timeout_outcome: row.timeout_outcome,
     redacted_paths: parseRedactedPathsJson(row.redacted_paths_json)
+  };
+}
+
+function toArtifactRetrievalTraceRecord(
+  row: import("./db/store.js").StoredArtifactRetrieval
+): ArtifactRetrievalTraceRecord {
+  return {
+    retrieval_id: row.retrieval_id,
+    block_id: row.block_id,
+    artifact_uri: row.artifact_uri,
+    kind: row.kind,
+    status: row.status as ArtifactRetrievalTraceRecord["status"],
+    error_code: row.error_code,
+    error_message: row.error_message,
+    requested_at: row.requested_at,
+    completed_at: row.completed_at
   };
 }
 
@@ -224,6 +241,9 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
     terminal_state,
     latest_run_id: timeline.run_id,
     latest_run_control_error,
-    interactions: store.listInteractionsForAction(actionId).map(toInteractionTraceRecord)
+    interactions: store.listInteractionsForAction(actionId).map(toInteractionTraceRecord),
+    artifact_retrievals: store
+      .listArtifactRetrievalsForAction(actionId)
+      .map(toArtifactRetrievalTraceRecord)
   };
 }

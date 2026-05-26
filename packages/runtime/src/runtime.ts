@@ -44,17 +44,19 @@ import type {
   RunResult,
   RunWithEventsResult
 } from "./lifecycle-types.js";
+import { fetchArtifactViewForStore } from "./artifact-retrieval.js";
+import type { FetchArtifactViewResult } from "./artifact-retrieval-types.js";
+import { getActionTrace, listActionHistory } from "./action-read.js";
+import type { ListActionHistoryOptions } from "./action-read-types.js";
+import { formatActionHistory, formatActionTrace } from "./format-action-read.js";
+import { computePlanHash } from "./plan-hash.js";
+import { formatReplayTimeline, replayAction } from "./replay.js";
+import { getEnabledAgent, loadRegistry } from "./registry.js";
+import { JsonRpcAgentClient } from "./transport/jsonrpc.js";
 
 const DEFAULT_CANCEL_TIMEOUT_MS = 5000;
 
 type ExecutionControlPhase = "running" | "cancel_requested" | "cancelling" | "terminal";
-import { computePlanHash } from "./plan-hash.js";
-import { getActionTrace, listActionHistory } from "./action-read.js";
-import type { ListActionHistoryOptions } from "./action-read-types.js";
-import { formatActionHistory, formatActionTrace } from "./format-action-read.js";
-import { formatReplayTimeline, replayAction } from "./replay.js";
-import { getEnabledAgent, loadRegistry } from "./registry.js";
-import { JsonRpcAgentClient } from "./transport/jsonrpc.js";
 
 export type {
   CommandArgsInput,
@@ -73,6 +75,12 @@ export type {
   RunResult,
   RunWithEventsResult
 } from "./lifecycle-types.js";
+export type {
+  ArtifactRetrievalAttempt,
+  ArtifactRetrievalErrorCode,
+  ArtifactRetrievalStatus,
+  FetchArtifactViewResult
+} from "./artifact-retrieval-types.js";
 
 export class ConsolerRuntime {
   readonly store: ConsolerStore;
@@ -622,6 +630,10 @@ export class ConsolerRuntime {
 
   formatActionTrace(actionId: string) {
     return formatActionTrace(getActionTrace(this.store, actionId));
+  }
+
+  fetchArtifactView(actionId: string, blockId: string): Promise<FetchArtifactViewResult> {
+    return fetchArtifactViewForStore(this.store, this.rootDir, actionId, blockId);
   }
 
   private async fetchAgentPreview(

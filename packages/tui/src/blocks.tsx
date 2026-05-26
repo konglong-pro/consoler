@@ -15,8 +15,17 @@ export function diffLineColor(line: string): "cyan" | "green" | "red" | undefine
   return undefined;
 }
 
-export function RenderableBlockView({ block }: { block: RenderableBlock }) {
+export function RenderableBlockView({
+  block,
+  highlight = false,
+  openable = false
+}: {
+  block: RenderableBlock;
+  highlight?: boolean;
+  openable?: boolean;
+}) {
   const title = block.title ? `[${block.title}] ` : "";
+  const prefix = openable ? (highlight ? "> " : "  ") : "";
   if (block.type === "markdown") {
     const lines = String(block.content).split("\n");
     return (
@@ -95,12 +104,19 @@ export function RenderableBlockView({ block }: { block: RenderableBlock }) {
         : null;
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold color="cyan">
-          {title}artifact
+        <Text bold color={highlight ? "green" : "cyan"}>
+          {prefix}
+          {title}artifact{openable ? " (Enter)" : ""}
         </Text>
-        <Text>
-          kind={art.kind ?? "?"} uri={art.uri ?? "?"}
-        </Text>
+        {highlight ? (
+          <Text color="green">
+            kind={art.kind ?? "?"} uri={art.uri ?? "?"}
+          </Text>
+        ) : (
+          <Text>
+            kind={art.kind ?? "?"} uri={art.uri ?? "?"}
+          </Text>
+        )}
         {art.label ? <Text>label={art.label}</Text> : null}
         {meta ? <Text dimColor>metadata={meta}</Text> : null}
       </Box>

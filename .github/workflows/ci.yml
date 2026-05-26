@@ -52,8 +52,8 @@ jobs:
       - name: Install Python test deps
         run: python -m pip install pytest
 
-      - name: V1 release gate
-        run: pnpm test:v1-release-gate
+      - name: V2 release gate
+        run: pnpm test:v2-release-gate
 
   windows:
     name: windows focused
@@ -97,5 +97,14 @@ jobs:
       - name: Test Python SDK
         run: pnpm test:python-sdk
 
+      - name: Test TUI
+        run: pnpm --filter @consoler/tui test
+
+      - name: Test conformance harness
+        run: pnpm test:conformance
+
       - name: Test agentctl CLI smoke
         run: pnpm test:agentctl-smoke
+
+      - name: Test artifact retrieval smoke
+        run: pnpm test:artifact-retrieval-smoke

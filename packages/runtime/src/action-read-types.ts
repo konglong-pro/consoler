@@ -79,6 +79,18 @@ export interface RejectedEventRecord {
   raw_payload: unknown;
 }
 
+export interface ArtifactRetrievalTraceRecord {
+  retrieval_id: string;
+  block_id: string;
+  artifact_uri: string;
+  kind: string;
+  status: "succeeded" | "failed";
+  error_code: string | null;
+  error_message: string | null;
+  requested_at: string;
+  completed_at: string | null;
+}
+
 export interface ActionTrace {
   action: ActionDraft;
   plan: { plan: ActionPlan; plan_hash: string } | null;
@@ -92,4 +104,5 @@ export interface ActionTrace {
   latest_run_id: string | null;
   latest_run_control_error: RunControlErrorSummary | null;
   interactions: InteractionTraceRecord[];
+  artifact_retrievals: ArtifactRetrievalTraceRecord[];
 }

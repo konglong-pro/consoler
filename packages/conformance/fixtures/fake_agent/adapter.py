@@ -293,13 +293,43 @@ class ConformanceFakeAdapter(AgentAdapter):
                         title="sample-diff",
                     ),
                     artifact_block(
-                        "file:///tmp/conformance-fixture.txt",
-                        "text/plain",
+                        "fake://artifacts/conformance-fixture",
+                        "conformance.fixture",
                         label="fixture.txt",
                         metadata={"message": args["message"]},
                         title="sample-artifact",
+                        block_id="conformance-artifact",
                     ),
                 ]
             }
 
         return StepHelper(emitter).run("echo", "Echo message", work)
+
+    def get_artifact_view(
+        self,
+        *,
+        artifact_uri: str,
+        kind: str,
+        block_id: str,
+        action_id: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if kind != "conformance.fixture" or not artifact_uri.startswith("fake://"):
+            raise AgentError("artifact.not_found", f"Unknown artifact {artifact_uri}")
+        return {
+            "artifact_uri": artifact_uri,
+            "kind": kind,
+            "title": "Conformance fixture artifact",
+            "metadata": metadata or {},
+            "blocks": [
+                markdown_block("# Fixture artifact", title="view"),
+                json_block(
+                    {
+                        "action_id": action_id,
+                        "block_id": block_id,
+                        "artifact_uri": artifact_uri,
+                    },
+                    title="context",
+                ),
+            ],
+        }

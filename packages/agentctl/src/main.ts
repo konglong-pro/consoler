@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { formatConformanceReport, runAgentConformance } from "@consoler/conformance";
 import { ConsolerRuntime, findConsolerRoot, type ActionHistoryStatus } from "@consoler/runtime";
 
+import { formatArtifactViewResult } from "./artifact-view.js";
 import { formatApprovalMaterial } from "./format.js";
 import { formatAgentctlHelp } from "./index.js";
 import { loadArgsFile, loadJsonValue } from "./json-load.js";
@@ -302,6 +303,27 @@ program
       return;
     }
     console.log(runtime.formatActionHistory(listOptions));
+  });
+
+program
+  .command("artifact-view")
+  .argument("<action_id>", "Persisted action id")
+  .argument("<block_id>", "Artifact block id from accepted action.succeeded result")
+  .option("--json", "Emit structured runtime result JSON", false)
+  .description("Retrieve an ArtifactView for an accepted artifact block")
+  .action(async (actionId: string, blockId: string, options: { json?: boolean }) => {
+    const runtime = createRuntime();
+    const result = await runtime.fetchArtifactView(actionId, blockId);
+    if (options.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (result.ok) {
+      console.log(formatArtifactViewResult(result));
+    }
+    if (!result.ok) {
+      const message = `${result.error.code}: ${result.error.message}`;
+      console.error(message);
+      process.exitCode = 1;
+    }
   });
 
 program

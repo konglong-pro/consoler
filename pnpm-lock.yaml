@@ -60,6 +60,9 @@ importers:
         specifier: ^12.10.0
         version: 12.10.0
     devDependencies:
+      '@consoler/conformance':
+        specifier: workspace:*
+        version: link:../conformance
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13

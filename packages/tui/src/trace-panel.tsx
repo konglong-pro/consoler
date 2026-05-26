@@ -2,9 +2,16 @@ import { Box, Text } from "ink";
 
 import type { ActionTrace } from "@consoler/runtime";
 
-import { EventLine, RenderableBlockView } from "./blocks.js";
+import { EventLine } from "./blocks.js";
+import { ResultBlocksPanel } from "./result-blocks-panel.js";
 
-export function TracePanel({ trace }: { trace: ActionTrace }) {
+export function TracePanel({
+  trace,
+  selectedArtifactBlockId
+}: {
+  trace: ActionTrace;
+  selectedArtifactBlockId?: string | null;
+}) {
   return (
     <Box flexDirection="column">
       <Text bold>Trace — {trace.action.command}</Text>
@@ -112,14 +119,25 @@ export function TracePanel({ trace }: { trace: ActionTrace }) {
         )}
       </Box>
 
-      {trace.result_blocks.length ? (
+      {trace.artifact_retrievals.length ? (
         <Box marginTop={1} flexDirection="column">
-          <Text bold>Result blocks</Text>
-          {trace.result_blocks.map((block, index) => (
-            <RenderableBlockView key={`${block.block_id}-${index}`} block={block} />
+          <Text bold>Artifact retrievals ({trace.artifact_retrievals.length})</Text>
+          {trace.artifact_retrievals.map((retrieval) => (
+            <Text key={retrieval.retrieval_id}>
+              {retrieval.block_id} — {retrieval.status}
+              {retrieval.error_code ? ` (${retrieval.error_code})` : ""}
+            </Text>
           ))}
         </Box>
       ) : null}
+
+      <ResultBlocksPanel
+        blocks={trace.result_blocks}
+        title="Result blocks"
+        {...(selectedArtifactBlockId !== undefined && selectedArtifactBlockId !== null
+          ? { selectedArtifactBlockId }
+          : {})}
+      />
     </Box>
   );
 }

@@ -228,6 +228,14 @@ class JsonRpcServer:
             return self.adapter.cancel()
         if method == "agent.health":
             return self.adapter.health()
+        if method == "agent.get_artifact_view":
+            return self.adapter.get_artifact_view(
+                artifact_uri=str(params["artifact_uri"]),
+                kind=str(params["kind"]),
+                block_id=str(params["block_id"]),
+                action_id=str(params["action_id"]),
+                metadata=params.get("metadata"),
+            )
         raise AgentError("method.not_found", f"Unknown method: {method}")
 
     def _run_execute(self, params: dict[str, Any]) -> dict[str, Any]:

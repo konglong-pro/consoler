@@ -2,6 +2,7 @@ import {
   manifestHasDuplicateCommands,
   validateActionEvent,
   validateCommandArgs,
+  validateArtifactView,
   validateManifest,
   validateRenderableBlock,
   type ActionEvent,
@@ -213,6 +214,25 @@ async function runBaseChecks(
   }
 
   checks.push(...validatePreviewPolicies(manifest));
+
+  if (manifest.artifact_retrieval) {
+    const capability = manifest.artifact_retrieval;
+    const valid =
+      capability.uri_schemes.length > 0 &&
+      capability.kinds.length > 0 &&
+      capability.uri_schemes.every((scheme) => scheme.length > 0) &&
+      capability.kinds.every((kind) => kind.length > 0);
+    checks.push(
+      check(
+        "manifest.artifact_retrieval",
+        "Artifact retrieval capability",
+        valid ? "passed" : "failed",
+        valid
+          ? `schemes=${capability.uri_schemes.join(",")} kinds=${capability.kinds.join(",")}`
+          : "artifact_retrieval must declare non-empty uri_schemes and kinds"
+      )
+    );
+  }
 
   return { checks, manifest };
 }
@@ -1194,6 +1214,77 @@ async function runExecuteChecks(
       replaySummaries ? "diff/artifact summaries present" : "missing summaries in replay text"
     )
   );
+
+  if (hasArtifact) {
+    const artifactBlock = trace.result_blocks.find((block) => block.type === "artifact");
+    if (!artifactBlock) {
+      checks.push(
+        check(
+          "execution.artifact_retrieval",
+          "Artifact retrieval",
+          "failed",
+          "Missing artifact block in result_blocks"
+        )
+      );
+    } else {
+      const fetchResult = await runtime.fetchArtifactView(actionId, artifactBlock.block_id);
+      if (!fetchResult.ok) {
+        checks.push(
+          check(
+            "execution.artifact_retrieval",
+            "Artifact retrieval",
+            "failed",
+            `${fetchResult.error.code}: ${fetchResult.error.message}`
+          )
+        );
+      } else {
+        const viewValid = validateArtifactView(fetchResult.view);
+        const traceAfter = runtime.getActionTrace(actionId);
+        const replayAfter = formatReplayTimeline(replayAction(runtime.store, actionId));
+        const auditRows = runtime.store.listArtifactRetrievalsForAction(actionId);
+        const storedContent = auditRows.some((row) =>
+          JSON.stringify(row).includes('"blocks"')
+        );
+        checks.push(
+          check(
+            "execution.artifact_retrieval",
+            "Artifact retrieval",
+            viewValid.ok ? "passed" : "failed",
+            viewValid.ok ? "fetchArtifactView returned valid ArtifactView" : "Invalid ArtifactView"
+          )
+        );
+        checks.push(
+          check(
+            "execution.artifact_retrieval_audit",
+            "Artifact retrieval audit",
+            auditRows.length === 1 && auditRows[0]?.status === "succeeded" && !storedContent
+              ? "passed"
+              : "failed",
+            `${auditRows.length} attempt(s), status=${auditRows[0]?.status ?? "none"}`
+          )
+        );
+        checks.push(
+          check(
+            "execution.artifact_retrieval_trace",
+            "Artifact retrieval trace summary",
+            traceAfter.artifact_retrievals.length === 1 &&
+              !JSON.stringify(traceAfter).includes("# Fixture artifact")
+              ? "passed"
+              : "failed",
+            `${traceAfter.artifact_retrievals.length} retrieval summary(s) in trace`
+          )
+        );
+        checks.push(
+          check(
+            "execution.artifact_retrieval_replay",
+            "Replay remains artifact-content-free",
+            !replayAfter.includes("# Fixture artifact") ? "passed" : "failed",
+            "Replay must not include fetched artifact view content"
+          )
+        );
+      }
+    }
+  }
 
   return checks;
 }

@@ -12,7 +12,11 @@ import type {
   RenderableBlock
 } from "@consoler/protocol";
 import type { AgentCommand, ApprovalToken } from "@consoler/protocol";
-import type { ActionHistoryEntry, ActionTrace } from "@consoler/runtime";
+import type {
+  ActionHistoryEntry,
+  ActionTrace,
+  FetchArtifactViewResult
+} from "@consoler/runtime";
 import {
   ConsolerRuntime,
   requiresPreviewApproval,
@@ -22,7 +26,10 @@ import {
   type RuntimeTerminalResult
 } from "@consoler/runtime";
 
+import { ArtifactViewPanel } from "./artifact-view-panel.js";
+import { artifactBlocksFromList } from "./artifact-utils.js";
 import { historyItemDetail, historyItemLabel } from "./history-label.js";
+import { ResultBlocksPanel } from "./result-blocks-panel.js";
 import { TracePanel } from "./trace-panel.js";
 
 import { blocksFromEvents, EventLine, RenderableBlockView } from "./blocks.js";
@@ -54,8 +61,10 @@ type Phase =
   | "prepared"
   | "running"
   | "finished"
+  | "artifact_view"
   | "replay";
 type TabId = "logs" | "events" | "json" | "replay";
+type ArtifactOpenSource = "trace" | "finished";
 
 const TABS: TabId[] = ["logs", "events", "json", "replay"];
 
@@ -111,6 +120,14 @@ export function App({
   const [interactionValues, setInteractionValues] = useState<Record<string, unknown>>({});
   const [interactionFocusedField, setInteractionFocusedField] = useState(0);
   const [focusedField, setFocusedField] = useState(0);
+  const [artifactSource, setArtifactSource] = useState<ArtifactOpenSource | null>(null);
+  const [selectedArtifactIndex, setSelectedArtifactIndex] = useState(0);
+  const [artifactViewState, setArtifactViewState] = useState<{
+    actionId: string;
+    blockId: string;
+    result: FetchArtifactViewResult | null;
+    loading: boolean;
+  } | null>(null);
   const formValuesRef = useRef<Record<string, unknown>>({});
   const submitFlushRef = useRef(false);
   const executionControlRef = useRef<PreparedExecutionControl | null>(null);
@@ -138,6 +155,50 @@ export function App({
 
   const logEvents = useMemo(() => events.filter((e) => e.type === "log"), [events]);
 
+  const artifactBlocks = useMemo(() => {
+    if (phase === "trace" && trace) {
+      return artifactBlocksFromList(trace.result_blocks);
+    }
+    if (phase === "finished") {
+      return artifactBlocksFromList(blocks);
+    }
+    return [];
+  }, [phase, trace, blocks]);
+
+  const selectedArtifactBlockId =
+    artifactBlocks[selectedArtifactIndex]?.block_id ?? null;
+
+  const openArtifact = useCallback(
+    async (actionId: string, blockId: string, source: ArtifactOpenSource) => {
+      setArtifactSource(source);
+      setPhase("artifact_view");
+      setArtifactViewState({ actionId, blockId, result: null, loading: true });
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await runtime.fetchArtifactView(actionId, blockId);
+        setArtifactViewState({ actionId, blockId, result, loading: false });
+        if (source === "trace") {
+          setTrace(runtime.getActionTrace(actionId));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setArtifactViewState({
+          actionId,
+          blockId,
+          result: {
+            ok: false,
+            error: { code: "agent_error", message: String(err) }
+          },
+          loading: false
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime]
+  );
+
   useEffect(() => {
     formValuesRef.current = formValues;
   }, [formValues]);
@@ -145,6 +206,7 @@ export function App({
   useEffect(() => {
     if (testTraceView) {
       setTrace(testTraceView.trace);
+      setSelectedArtifactIndex(0);
       setPhase("trace");
       if (testTraceView.tab) setTab(testTraceView.tab);
       if (initialManifest) setManifest(initialManifest);
@@ -233,6 +295,7 @@ export function App({
     try {
       const payload = runtime.getActionTrace(actionId);
       setTrace(payload);
+      setSelectedArtifactIndex(0);
       setPhase("trace");
       setError(null);
     } catch (err) {
@@ -382,6 +445,7 @@ export function App({
       } else {
         setBlocks([]);
       }
+      setSelectedArtifactIndex(0);
       setPhase("finished");
       clearPendingInteraction();
     } catch (err) {
@@ -512,6 +576,32 @@ export function App({
         return;
       }
     }
+    if (
+      (phase === "trace" || phase === "finished") &&
+      artifactBlocks.length > 0 &&
+      !busy
+    ) {
+      if (key.upArrow) {
+        setSelectedArtifactIndex(
+          (current) => (current - 1 + artifactBlocks.length) % artifactBlocks.length
+        );
+        return;
+      }
+      if (key.downArrow) {
+        setSelectedArtifactIndex((current) => (current + 1) % artifactBlocks.length);
+        return;
+      }
+      if (key.return && selectedArtifactBlockId) {
+        const actionId =
+          phase === "trace" ? trace!.action.action_id : prepared!.action.action_id;
+        void openArtifact(
+          actionId,
+          selectedArtifactBlockId,
+          phase === "trace" ? "trace" : "finished"
+        );
+        return;
+      }
+    }
     if (key.tab && key.ctrl) {
       const idx = TABS.indexOf(tab);
       setTab(TABS[(idx + 1) % TABS.length]!);
@@ -519,6 +609,12 @@ export function App({
     }
     if (key.escape) {
       setError(null);
+      if (phase === "artifact_view") {
+        setArtifactViewState(null);
+        setPhase(artifactSource === "finished" ? "finished" : "trace");
+        setArtifactSource(null);
+        return;
+      }
       if (phase === "trace") {
         setTrace(null);
         setPhase("history");
@@ -604,7 +700,9 @@ export function App({
             ? "history"
             : phase === "trace"
               ? "trace"
-              : selectedCommand ?? "select command"}
+              : phase === "artifact_view"
+                ? "artifact"
+                : selectedCommand ?? "select command"}
       </Text>
       {busy ? (
         <Text color="yellow">
@@ -651,7 +749,23 @@ export function App({
 
         {phase === "trace" && trace ? (
           <Box flexDirection="column">
-            <TracePanel trace={trace} />
+            <TracePanel trace={trace} selectedArtifactBlockId={selectedArtifactBlockId} />
+          </Box>
+        ) : null}
+
+        {phase === "artifact_view" && artifactViewState ? (
+          <Box flexDirection="column">
+            {artifactViewState.loading ? (
+              <Text color="yellow">Fetching artifact view…</Text>
+            ) : artifactViewState.result ? (
+              <ArtifactViewPanel
+                actionId={artifactViewState.actionId}
+                blockId={artifactViewState.blockId}
+                result={artifactViewState.result}
+              />
+            ) : (
+              <Text color="red">No artifact view result</Text>
+            )}
           </Box>
         ) : null}
 
@@ -793,9 +907,17 @@ export function App({
             {events.map((event) => (
               <EventLine key={event.event_id} event={event} />
             ))}
-            {blocks.map((block, index) => (
-              <RenderableBlockView key={`${block.block_id}-${index}`} block={block} />
-            ))}
+            {phase === "finished" ? (
+              <ResultBlocksPanel
+                blocks={blocks}
+                title="Result blocks"
+                selectedArtifactBlockId={selectedArtifactBlockId}
+              />
+            ) : (
+              blocks.map((block, index) => (
+                <RenderableBlockView key={`${block.block_id}-${index}`} block={block} />
+              ))
+            )}
           </Box>
         ) : null}
 
@@ -852,8 +974,14 @@ export function App({
             : phase === "history"
               ? "Enter trace | Esc home"
               : phase === "trace"
-                ? "r replay | Esc history | Ctrl+Tab JSON"
-                : phase === "form"
+                ? `r replay | Esc history | Ctrl+Tab JSON${
+                    artifactBlocks.length ? " | ↑↓ Enter artifact" : ""
+                  }`
+                : phase === "artifact_view"
+                  ? "Esc back"
+                  : phase === "finished" && artifactBlocks.length
+                    ? "↑↓ artifact | Enter open | Ctrl+Tab JSON"
+                    : phase === "form"
                   ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
                   : phase === "running"
                     ? pendingInteraction?.choices?.length

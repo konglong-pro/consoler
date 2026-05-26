@@ -2,6 +2,10 @@
 
 Implementation-free terms for the agent operations console.
 
+## Agent Operations Console
+
+A generic console for operating out-of-process agents through shared protocol objects and lifecycle rules, not a product-specific UI for one agent.
+
 ## Action Timeline
 
 The primary UI surface showing one action’s lifecycle in order: draft, plan, static preview, approval, live events, and result blocks. It is the main panel in the Ink TUI, not a separate history browser.
@@ -59,6 +63,22 @@ A `RenderableBlock` with `type: "diff"` whose `content` carries a unified diff s
 A `RenderableBlock` with `type: "artifact"` whose `content` references produced output by `uri` and `kind`, with optional `label` and `metadata`. In V1d, artifact blocks are event-carried references only: TUI, trace, and replay may display metadata but must not open or resolve the `uri` unless a future planning doc adds artifact storage and fetch.
 
 For `indbase.ingest_file`, artifact blocks use logical `indbase://ingest_runs/...`, `indbase://documents/...`, and `indbase://document_revisions/...` URIs. These are consoler renderable references to indbase entities, not indbase internal durable evidence artifacts and not filesystem paths.
+
+## Artifact Retrieval
+
+A controlled, user-triggered read flow where consoler asks the artifact-owning agent to return viewable content for an artifact URI without consoler taking ownership of artifact storage; it is separate from Replay and is not an Action.
+
+## Artifact Browser
+
+A read-only surface for inspecting retrieved artifact content and metadata from an Artifact Block.
+
+## Artifact View
+
+A retrieved, renderable view of one artifact URI made of metadata and non-artifact Renderable Blocks.
+
+## Artifact Retrieval Attempt
+
+A lightweight audit record that an Artifact Retrieval was requested for an Artifact Block, without storing the retrieved Artifact View content.
 
 ## Cooperative Cancel
 

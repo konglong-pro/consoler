@@ -15,6 +15,7 @@ from consoler_agent_sdk import (
     StepHelper,
     artifact_block,
     diff_block,
+    markdown_block,
     normalize_error,
 )
 from consoler_agent_sdk.adapter import AgentAdapter
@@ -314,6 +315,48 @@ def test_interaction_timeout_skip_and_continue_results():
     helper._pending_id = "ix_continue"
     result = helper.respond("ix_continue", {"timed_out": True, "action": "continue"})
     assert result == {"ok": True}
+
+
+def test_get_artifact_view_default_unsupported():
+    adapter = EchoAdapter()
+    with pytest.raises(AgentError) as exc:
+        adapter.get_artifact_view(
+            artifact_uri="fake://x",
+            kind="text/plain",
+            block_id="b1",
+            action_id="act_1",
+        )
+    assert exc.value.code == "artifact_retrieval.unsupported"
+
+
+class ArtifactAdapter(EchoAdapter):
+    def get_artifact_view(self, **kwargs) -> dict:
+        return {
+            "artifact_uri": kwargs["artifact_uri"],
+            "kind": kwargs["kind"],
+            "blocks": [markdown_block("# View", title="view")],
+        }
+
+
+def test_jsonrpc_get_artifact_view_dispatch():
+    adapter = ArtifactAdapter()
+    server = JsonRpcServer(adapter)
+    response = server._dispatch(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "agent.get_artifact_view",
+            "params": {
+                "artifact_uri": "fake://artifacts/x",
+                "kind": "conformance.fixture",
+                "block_id": "b1",
+                "action_id": "act_1",
+            },
+        }
+    )
+    assert response is not None
+    assert response["result"]["artifact_uri"] == "fake://artifacts/x"
+    assert response["result"]["blocks"][0]["type"] == "markdown"
 
 
 def test_jsonrpc_discover_dispatch(monkeypatch):

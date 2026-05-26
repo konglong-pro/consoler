@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from .errors import AgentError
+
 
 class AgentAdapter(ABC):
     @abstractmethod
@@ -51,3 +53,17 @@ class AgentAdapter(ABC):
 
     def cancel(self) -> dict[str, Any]:
         return {"status": "cancel_requested"}
+
+    def get_artifact_view(
+        self,
+        *,
+        artifact_uri: str,
+        kind: str,
+        block_id: str,
+        action_id: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        raise AgentError(
+            "artifact_retrieval.unsupported",
+            "Artifact retrieval is not supported by this agent",
+        )

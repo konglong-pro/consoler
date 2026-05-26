@@ -37,6 +37,7 @@ export type {
   ActionHistoryEntry,
   ActionHistoryStatus,
   ActionRunSummary,
+  ArtifactRetrievalTraceRecord,
   RunControlErrorSummary,
   ActionTrace,
   InteractionTraceRecord,
@@ -44,6 +45,14 @@ export type {
   ListActionHistoryOptions,
   RejectedEventRecord
 } from "./action-read-types.js";
+export type {
+  ArtifactRetrievalAttempt,
+  ArtifactRetrievalErrorCode,
+  ArtifactRetrievalStatus,
+  FetchArtifactViewResult
+} from "./artifact-retrieval-types.js";
+export { ARTIFACT_VIEW_MAX_RESPONSE_BYTES } from "./artifact-retrieval-types.js";
+export { fetchArtifactViewForStore, listArtifactRetrievalAttempts } from "./artifact-retrieval.js";
 export {
   deriveActionStatus,
   getActionTrace,
