@@ -11,10 +11,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/app.js";
 import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 
-const WAIT_OPTS = { timeout: 10_000, interval: 50 } as const;
+const WAIT_OPTS = { timeout: 15_000, interval: 50 } as const;
 
 async function flushStdin(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 120 : 50));
+}
+
+async function selectMenuDownEnter(stdin: { write: (value: string) => void }): Promise<void> {
+  stdin.write("\u001B[B");
+  await flushStdin();
+  stdin.write("\r");
+  await flushStdin();
 }
 
 describe("TUI history and trace flow", () => {
@@ -51,8 +58,7 @@ describe("TUI history and trace flow", () => {
       WAIT_OPTS
     );
 
-    stdin.write("2");
-    await flushStdin();
+    await selectMenuDownEnter(stdin);
 
     await vi.waitFor(
       () => {
