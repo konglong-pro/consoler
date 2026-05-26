@@ -77,6 +77,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V2a artifact retrieval CLI loop: start in `docs/planning/v2a-artifact-retrieval-cli-loop.md`; implement runtime retrieval, audit, SDK/fake-agent support, conformance, and `agentctl artifact-view` without TUI or real indbase.
 - V2a artifact retrieval / browser: start in `docs/planning/v2a-artifact-retrieval-browser.md`; add generic agent-owned artifact viewing before natural language mapping.
 - V2b artifact browser / real-agent adoption: start in `docs/planning/v2b-artifact-browser-real-adoption.md`; wire TUI `artifact_view` + real `indbase` `get_artifact_view` on completed V2a `fetchArtifactView` without NL mapping.
+- V2c artifact retrieval closeout: start in `docs/planning/v2c-artifact-retrieval-closeout.md`; close the phase with local-only real artifact smoke coverage and testing docs without adding new feature scope.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -258,6 +259,14 @@ Prefer narrow validation for the changed package before broad checks.
   5. Keep default CI fake-agent based; real `E:\indbase` retrieval is local-only.
   6. Run focused TUI/runtime/agentctl/conformance/Python SDK checks, `uv run pytest tests/test_indbase_agent.py` from `E:\indbase`, typecheck, build, root test, `git diff --check`, and disposable `agentctl artifact-view` smoke.
 
+- Artifact retrieval closeout change (V2c):
+  1. Read `docs/planning/v2c-artifact-retrieval-closeout.md`, `docs/testing/v2-release-gate.md`, and `docs/testing/real-indbase-smokes.md`.
+  2. Keep the change to local-only smoke coverage and docs unless validation exposes a real regression.
+  3. Do not add protocol/runtime/TUI/CLI feature scope, artifact content persistence, default CI real-agent dependency, or natural language mapping.
+  4. Extend `pnpm test:real-indbase-smoke` to prove real `agentctl artifact-view` against disposable `indbase://...` blocks.
+  5. Document V2 artifact retrieval closeout and manual TUI smoke; keep detailed evidence out of `AGENTS.md`.
+  6. Run `pnpm test:real-indbase-smoke`, `pnpm test:artifact-retrieval-smoke`, `pnpm test:v2-release-gate`, `pnpm typecheck`, `pnpm build`, `pnpm test`, `git diff --check`, and focused `E:\indbase` agent tests when real-agent coverage changes.
+
 - TUI change:
   1. Add or update focused tests under `packages/tui/`.
   2. Verify behavior against recorded event replay.
@@ -292,6 +301,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V1q real indbase smokes are local-only disposable-vault checks; they must not become default CI without a provisioned real-agent environment.
 - V2a artifact retrieval is a user-triggered read flow owned by the artifact-producing agent; it is not an Action, not replay, and not consoler-owned artifact storage.
 - V2b adds Ink `artifact_view` and real `indbase` `get_artifact_view`; consoler still calls only `fetchArtifactView(action_id, block_id)` and never stores retrieved content.
+- V2c is closeout-only for artifact retrieval/browser; do not use it to add downloads, media rendering, pagination, global artifact search, arbitrary URI fetch, or NL mapping.
 - v0 is a strict subset for `indbase.doctor`; do not implement future platform features unless the current task explicitly changes scope.
 - V1a `indbase.ingest_file` is the only approved side-effect expansion path. It is single-file only unless a newer planning doc changes scope.
 
@@ -326,6 +336,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v1p-v1-stabilization-release-gate.md`: V1 stabilization and release gate execution brief.
 - `docs/testing/v1-release-gate.md`: V1 acceptance matrix, CI gates, local-only smokes, and V2+ exclusions.
 - `docs/testing/v2-release-gate.md`: V2 fake-agent release gate, CI gates, and local-only real-agent exclusions.
+- `docs/testing/v2-artifact-retrieval-closeout.md`: V2 artifact retrieval/browser closeout, frozen surface, and manual TUI smoke recipe.
 - `docs/planning/v1q-real-indbase-local-smokes.md`: local-only real indbase disposable smoke execution brief.
 - `docs/testing/real-indbase-smokes.md`: command and coverage for local real indbase smoke runs.
 - `docs/testing/v1-closeout.md`: V1 frozen surface, validation evidence, and V2 entry criteria.
@@ -333,6 +344,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v2a-artifact-retrieval-cli-loop.md`: runtime, SDK/fake-agent, conformance, and `agentctl artifact-view` execution brief.
 - `docs/planning/v2a-artifact-retrieval-browser.md`: generic artifact retrieval and browser execution brief.
 - `docs/planning/v2b-artifact-browser-real-adoption.md`: TUI artifact browser and local-only real `indbase` retrieval adoption brief.
+- `docs/planning/v2c-artifact-retrieval-closeout.md`: artifact retrieval/browser closeout brief for real local smoke coverage and testing docs.
 
 ## Done Means
 

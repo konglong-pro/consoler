@@ -39,11 +39,22 @@ On Windows, `python --version` must resolve to a real Python executable before r
 
 Default CI must not depend on `E:\indbase`, real vaults, local filesystem paths, or timing-sensitive real-agent cancellation.
 
+## Default CI vs Local-Only
+
+| Coverage | Gate | Runs in default CI |
+| --- | --- | --- |
+| Fake-agent artifact retrieval CLI | `pnpm test:artifact-retrieval-smoke` | Yes (Linux V2 gate + Windows job) |
+| Ink artifact browser (mocked fetch) | `pnpm --filter @consoler/tui test` | Yes (Windows job) |
+| Conformance fake retrieval checks | `pnpm test:conformance` | Yes |
+| Real `indbase` ingest + `artifact-view` | `pnpm test:real-indbase-smoke` | No |
+| Real `indbase` unit tests | `uv run pytest tests/test_indbase_agent.py` from `E:\indbase` | No |
+| Manual TUI against kept smoke root | Documented in `docs/testing/v2-artifact-retrieval-closeout.md` | No |
+
 ## Local-Only (not in default CI)
 
-- `pnpm test:real-indbase-smoke`
-- Disposable-vault `agentctl artifact-view` against real `indbase`
+- `pnpm test:real-indbase-smoke` (includes real `agentctl artifact-view` for disposable ingest artifact blocks)
 - `uv run pytest tests/test_indbase_agent.py` from `E:\indbase`
+- Manual TUI smoke using `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1` output
 
 ## V1 Gate
 

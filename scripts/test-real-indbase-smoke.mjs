@@ -135,6 +135,111 @@ function assertInteraction(trace, expectedResponse, label) {
   assert.equal(interaction?.response, expectedResponse, `${label} interaction response`);
 }
 
+const REQUIRED_REAL_ARTIFACT_KINDS = ["indbase.ingest_run", "indbase.document"];
+const OPTIONAL_REAL_ARTIFACT_KINDS = ["indbase.document_revision"];
+
+const REAL_VIEW_MARKERS = {
+  "indbase.ingest_run": "# Ingest run",
+  "indbase.document": "# Document",
+  "indbase.document_revision": "# Revision"
+};
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readReplay(rootDir, actionId, label) {
+  const result = runAgentctl(["replay", actionId], {
+    env: { CONSOLER_ROOT: rootDir },
+    label: `${label} replay`
+  });
+  return result.stdout;
+}
+
+function assertArtifactViewSmoke(rootDir, actionId, block, label) {
+  const kind = block.content?.kind;
+  const result = runAgentctl(
+    ["artifact-view", actionId, block.block_id, "--json"],
+    { env: { CONSOLER_ROOT: rootDir }, label: `${label} artifact-view ${block.block_id}` }
+  );
+  const viewResult = parseJson(result.stdout, `${label} artifact-view`);
+  assert.equal(viewResult.ok, true, `${label} artifact-view failed: ${JSON.stringify(viewResult)}`);
+  assert.equal(viewResult.retrieval.status, "succeeded", `${label} retrieval status`);
+  assert.ok(viewResult.view?.blocks?.length > 0, `${label} view blocks empty`);
+  for (const viewBlock of viewResult.view.blocks) {
+    assert.notEqual(viewBlock.type, "artifact", `${label} nested artifact block`);
+  }
+  const marker = REAL_VIEW_MARKERS[kind];
+  if (marker) {
+    assert.match(
+      JSON.stringify(viewResult.view.blocks),
+      new RegExp(escapeRegExp(marker)),
+      `${label} view blocks missing expected marker`
+    );
+  }
+  return marker;
+}
+
+function assertTraceAndReplayFreeOfMarkers(rootDir, actionId, markers, label) {
+  const traceAfter = readTrace(rootDir, actionId, `${label} after retrieval`);
+  assert.ok(
+    traceAfter.artifact_retrievals?.length >= markers.length,
+    `${label} missing retrieval audit summaries`
+  );
+  const traceJson = JSON.stringify(traceAfter);
+  const replayText = readReplay(rootDir, actionId, label);
+  for (const marker of markers) {
+    if (!marker) continue;
+    assert.doesNotMatch(traceJson, new RegExp(escapeRegExp(marker)), `${label} trace leaked view content`);
+    assert.doesNotMatch(replayText, new RegExp(escapeRegExp(marker)), `${label} replay leaked view content`);
+  }
+}
+
+function findArtifactBlock(trace, kind) {
+  return (trace.result_blocks ?? []).find(
+    (block) => block.type === "artifact" && block.content?.kind === kind
+  );
+}
+
+function runRealArtifactRetrievalSmokes(rootDir, primaryActionId, sources, label) {
+  const opened = [];
+  const markersForPrimary = [];
+  const kindsToCheck = [...REQUIRED_REAL_ARTIFACT_KINDS, ...OPTIONAL_REAL_ARTIFACT_KINDS];
+  for (const kind of kindsToCheck) {
+    let fetched = false;
+    for (const source of sources) {
+      const block = findArtifactBlock(source.trace, kind);
+      if (!block?.block_id) continue;
+      const marker = assertArtifactViewSmoke(
+        rootDir,
+        source.actionId,
+        block,
+        `${source.label} ${kind}`
+      );
+      opened.push({ block_id: block.block_id, kind, action_id: source.actionId });
+      if (source.actionId === primaryActionId) {
+        markersForPrimary.push(marker);
+      }
+      fetched = true;
+      break;
+    }
+    if (!fetched && OPTIONAL_REAL_ARTIFACT_KINDS.includes(kind)) {
+      console.warn(
+        `Warning: optional artifact kind ${kind} not present in disposable smoke traces; skipping artifact-view check.`
+      );
+      continue;
+    }
+    assert.ok(
+      fetched,
+      `${label} missing artifact block for kind ${kind}; checked ${sources.map((s) => s.label).join(", ")}`
+    );
+  }
+  assertTraceAndReplayFreeOfMarkers(rootDir, primaryActionId, markersForPrimary, label);
+  return opened
+    .filter((item) => item.action_id === primaryActionId)
+    .map(({ block_id, kind }) => ({ block_id, kind }));
+}
+
 function initVault(indbaseRepo, vaultPath, env) {
   run(
     "uv",
@@ -278,7 +383,6 @@ try {
   assertSucceeded(normalTrace, "ingest normal");
   assertHasBlock(normalTrace, "diff", "ingest normal");
   assertHasBlock(normalTrace, "artifact", "ingest normal");
-
   const skip = runAction(
     realRoot,
     "indbase",
@@ -308,11 +412,26 @@ try {
   assertHasBlock(continueTrace, "diff", "duplicate continue");
   assertHasBlock(continueTrace, "artifact", "duplicate continue");
 
+  const manualArtifactBlocks = runRealArtifactRetrievalSmokes(
+    realRoot,
+    normal.action_id,
+    [
+      { actionId: normal.action_id, trace: normalTrace, label: "ingest normal" },
+      { actionId: continued.action_id, trace: continueTrace, label: "duplicate continue" }
+    ],
+    "real artifact-view"
+  );
+
   runIndbaseCancelTests(indbaseRepo, { PYTHONPATH: realPythonPath });
   runFakeCancelTimeoutSmoke(fakeRoot, fakeCancelArgs);
 
   console.log("\nreal indbase smoke passed");
   console.log(`Disposable vault: ${vaultPath}`);
+  if (keepTemp) {
+    console.log(`CONSOLER_ROOT=${realRoot}`);
+    console.log(`MANUAL_TUI_ACTION_ID=${normal.action_id}`);
+    console.log(`MANUAL_TUI_ARTIFACT_BLOCK_IDS=${JSON.stringify(manualArtifactBlocks)}`);
+  }
 } finally {
   if (keepTemp) {
     console.log(`Keeping smoke temp directory: ${tmpDir}`);

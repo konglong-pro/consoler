@@ -1,6 +1,6 @@
 # Real indbase Local Smokes
 
-These smokes are local-only. They prove the V1 real-agent path against disposable vaults without making default CI depend on `E:\indbase`, local filesystem paths, or timing-sensitive real-agent cancellation.
+These smokes are local-only. They prove the V1 real-agent path and V2 real `indbase` artifact retrieval against disposable vaults without making default CI depend on `E:\indbase`, local filesystem paths, or timing-sensitive real-agent cancellation.
 
 ## Command
 
@@ -13,7 +13,7 @@ pnpm test:real-indbase-smoke
 Environment:
 
 - `INDBASE_REPO`: real indbase checkout. Defaults to `E:\indbase` on Windows.
-- `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1`: keep the temporary smoke directory for inspection after the run.
+- `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1`: keep the temporary smoke directory for inspection after the run. Also prints `CONSOLER_ROOT`, `MANUAL_TUI_ACTION_ID`, and `MANUAL_TUI_ARTIFACT_BLOCK_IDS` for manual TUI smoke.
 
 The script runs `pnpm build` first and then uses compiled `packages/agentctl/dist/main.js`.
 
@@ -32,10 +32,15 @@ The script removes the temp directory unless `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1
 | --- | --- | --- |
 | `indbase.doctor` | real `indbase` | `agentctl run` succeeds and trace has a succeeded terminal state. |
 | `indbase.ingest_file` normal | real `indbase` | Probe preview approval plus execution succeeds and trace includes diff/artifact result blocks. |
+| real `artifact-view` (ingest traces) | real `indbase` | For `indbase.ingest_run` and `indbase.document` artifact blocks (and `indbase.document_revision` when emitted): `agentctl artifact-view --json` returns `ok=true`, succeeded retrieval, non-empty view blocks, no nested artifact blocks; trace keeps audit only; replay stays content-free. |
 | duplicate `skip` | real `indbase` | Seeded interaction response is persisted as `skip`; action succeeds with skip result and no diff block. |
 | duplicate `continue` | real `indbase` | Seeded interaction response is persisted as `continue`; action succeeds with diff/artifact result blocks. |
 | ingest cooperative cancel | real `indbase` tests | Focused adapter/pipeline tests prove checkpoint propagation and cancellation re-raise. |
 | cancel timeout fallback | conformance fake | `slow_ignore_cancel` proves runtime force-kill fallback and no synthetic `action.cancelled`. |
+
+## Manual TUI Smoke
+
+After `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke`, use the printed `CONSOLER_ROOT` and `MANUAL_TUI_ACTION_ID` with `pnpm tui --`, then History → Trace → artifact block → Enter → Esc. Full steps are in `docs/testing/v2-artifact-retrieval-closeout.md`.
 
 ## Boundary
 
