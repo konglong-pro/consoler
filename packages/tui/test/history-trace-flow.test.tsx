@@ -14,12 +14,23 @@ import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 const WAIT_OPTS = { timeout: 15_000, interval: 50 } as const;
 
 async function flushStdin(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 120 : 50));
+  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 200 : 120));
 }
 
-async function selectMenuDownEnter(stdin: { write: (value: string) => void }): Promise<void> {
+async function selectHistoryFromHome(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined
+): Promise<void> {
   stdin.write("\u001B[B");
   await flushStdin();
+  await vi.waitFor(
+    () => {
+      const frame = lastFrame() ?? "";
+      expect(frame).toContain("History");
+      expect(frame).not.toMatch(/>\s*New Action/);
+    },
+    { timeout: 5_000, interval: 50 }
+  );
   stdin.write("\r");
   await flushStdin();
 }
@@ -58,7 +69,7 @@ describe("TUI history and trace flow", () => {
       WAIT_OPTS
     );
 
-    await selectMenuDownEnter(stdin);
+    await selectHistoryFromHome(stdin, lastFrame);
 
     await vi.waitFor(
       () => {

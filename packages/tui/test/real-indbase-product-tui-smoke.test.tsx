@@ -163,10 +163,3 @@ describeReal("real indbase product TUI manual path", () => {
     180_000
   );
 });
-
-describe("real indbase product TUI manual path (guard)", () => {
-  it("documents required env when skipped", () => {
-    if (smokeRoot && vaultPath) return;
-    expect(process.env.CONSOLER_ROOT, "set CONSOLER_ROOT from kept smoke").toBeTruthy();
-  });
-});
