@@ -15,7 +15,19 @@ import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 const WAIT_OPTS = { timeout: 15_000, interval: 50 } as const;
 
 async function flushStdin(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 120 : 50));
+  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 200 : 50));
+}
+
+async function typeNlAndSubmit(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined,
+  text: string
+): Promise<void> {
+  stdin.write(text);
+  await vi.waitFor(() => expect(lastFrame() ?? "").toContain(text), WAIT_OPTS);
+  await flushStdin();
+  stdin.write("\r");
+  await flushStdin();
 }
 
 function seedFakeAgentAction(runtime: ConsolerRuntime): void {
@@ -175,10 +187,7 @@ describe("indbase product variant TUI", () => {
       WAIT_OPTS
     );
 
-    stdin.write("check vault C:\\vault");
-    await flushStdin();
-    stdin.write("\r");
-    await flushStdin();
+    await typeNlAndSubmit(stdin, lastFrame, "check vault C:\\vault");
 
     await vi.waitFor(
       () => {
@@ -210,10 +219,7 @@ describe("indbase product variant TUI", () => {
       WAIT_OPTS
     );
 
-    stdin.write("import C:\\docs\\a.md");
-    await flushStdin();
-    stdin.write("\r");
-    await flushStdin();
+    await typeNlAndSubmit(stdin, lastFrame, "import C:\\docs\\a.md");
 
     await vi.waitFor(
       () => {
@@ -244,10 +250,7 @@ describe("indbase product variant TUI", () => {
       WAIT_OPTS
     );
 
-    stdin.write("completely unrelated phrase");
-    await flushStdin();
-    stdin.write("\r");
-    await flushStdin();
+    await typeNlAndSubmit(stdin, lastFrame, "completely unrelated phrase");
 
     await vi.waitFor(
       () => {

@@ -168,6 +168,7 @@ export function App({
     loading: boolean;
   } | null>(null);
   const formValuesRef = useRef<Record<string, unknown>>({});
+  const nlTextRef = useRef("");
   const submitFlushRef = useRef(false);
   const executionControlRef = useRef<PreparedExecutionControl | null>(null);
   const cancelRequestedRef = useRef(false);
@@ -346,7 +347,7 @@ export function App({
   const submitNaturalLanguage = useCallback(
     (rawText?: string) => {
       if (!variant || !manifest) return;
-      const text = (rawText ?? nlText).trim();
+      const text = (rawText ?? nlTextRef.current).trim();
       if (!text) {
         setHomeNotice("Enter a request or press Tab to choose a task.");
         return;
@@ -375,7 +376,7 @@ export function App({
       setHomeNotice(result.message);
       setHomeFocus("tasks");
     },
-    [manifest, nlText, variant]
+    [manifest, variant]
   );
 
   const loadHistory = () => {
@@ -844,8 +845,14 @@ export function App({
                 <TextInput
                   value={nlText}
                   focus={homeFocus === "nl"}
-                  onChange={setNlText}
-                  onSubmit={(value) => submitNaturalLanguage(value)}
+                  onChange={(value) => {
+                    nlTextRef.current = value;
+                    setNlText(value);
+                  }}
+                  onSubmit={(value) => {
+                    nlTextRef.current = value;
+                    scheduleAfterInputFlush(() => submitNaturalLanguage(value));
+                  }}
                 />
                 <Box flexDirection="column" marginTop={1}>
                   <Text bold={homeFocus === "tasks"} dimColor={homeFocus === "nl"}>
