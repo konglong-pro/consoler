@@ -98,9 +98,18 @@ function hashFile(filePath: string): string {
 }
 
 function readGitState(cwd: string): { head: string | null; dirty: boolean } {
+  const gitStdio: ["pipe", "pipe", "ignore"] = ["pipe", "pipe", "ignore"];
   try {
-    const head = execSync("git rev-parse HEAD", { cwd, encoding: "utf8" }).trim();
-    const status = execSync("git status --porcelain", { cwd, encoding: "utf8" }).trim();
+    const head = execSync("git rev-parse HEAD", {
+      cwd,
+      encoding: "utf8",
+      stdio: gitStdio
+    }).trim();
+    const status = execSync("git status --porcelain", {
+      cwd,
+      encoding: "utf8",
+      stdio: gitStdio
+    }).trim();
     return { head, dirty: status.length > 0 };
   } catch {
     return { head: null, dirty: false };

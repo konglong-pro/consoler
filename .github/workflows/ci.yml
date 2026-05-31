@@ -55,6 +55,9 @@ jobs:
       - name: V2 release gate
         run: pnpm test:v2-release-gate
 
+      - name: V3b intent drafting gate
+        run: pnpm test:v3b-intent-gate
+
   windows:
     name: windows focused
     runs-on: windows-latest

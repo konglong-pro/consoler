@@ -49,7 +49,7 @@ describe("indbase product variant TUI", () => {
     cleanup();
   });
 
-  it("shows product tasks on home, not raw command names", async () => {
+  it("shows NL input and product tasks on home, not raw command names", async () => {
     const { lastFrame, unmount } = render(
       <App
         runtime={runtime}
@@ -61,6 +61,7 @@ describe("indbase product variant TUI", () => {
     await vi.waitFor(
       () => {
         const frame = lastFrame() ?? "";
+        expect(frame).toContain("Describe your request");
         expect(frame).toContain("Check knowledge base status");
         expect(frame).toContain("Import a file");
         expect(frame).toContain("History");
@@ -99,7 +100,7 @@ describe("indbase product variant TUI", () => {
     unmount();
   });
 
-  it("opens product-labeled form for a task", async () => {
+  it("opens product-labeled form for a task from the task list", async () => {
     const { lastFrame, stdin, unmount } = render(
       <App
         runtime={runtime}
@@ -113,6 +114,8 @@ describe("indbase product variant TUI", () => {
       WAIT_OPTS
     );
 
+    stdin.write("\t");
+    await flushStdin();
     stdin.write("\r");
     await flushStdin();
 
@@ -122,6 +125,136 @@ describe("indbase product variant TUI", () => {
         expect(frame).toContain("Vault location");
         expect(frame).not.toContain("vault_path");
         expect(frame).not.toContain("indbase.doctor");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("shows guidance when submitting empty natural language", async () => {
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseManifestV1aFixture}
+      />
+    );
+
+    await vi.waitFor(
+      () => expect(lastFrame() ?? "").toContain("Describe your request"),
+      WAIT_OPTS
+    );
+
+    stdin.write("\r");
+    await flushStdin();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Enter a request or press Tab to choose a task.");
+        expect(frame).toContain("Describe your request");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("prefills vault check form from natural language", async () => {
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseManifestV1aFixture}
+      />
+    );
+
+    await vi.waitFor(
+      () => expect(lastFrame() ?? "").toContain("Describe your request"),
+      WAIT_OPTS
+    );
+
+    stdin.write("check vault C:\\vault");
+    await flushStdin();
+    stdin.write("\r");
+    await flushStdin();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Check knowledge base status");
+        expect(frame).toContain("Vault location");
+        expect(frame).toContain("C:\\vault");
+        expect(frame).not.toContain("action_id");
+        expect(frame).not.toContain("approval_id");
+        expect(frame).not.toContain("prepared");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("opens import form with partial prefill and missing-field notice", async () => {
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseManifestV1aFixture}
+      />
+    );
+
+    await vi.waitFor(
+      () => expect(lastFrame() ?? "").toContain("Describe your request"),
+      WAIT_OPTS
+    );
+
+    stdin.write("import C:\\docs\\a.md");
+    await flushStdin();
+    stdin.write("\r");
+    await flushStdin();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Import a file");
+        expect(frame).toContain("File to import");
+        expect(frame).toContain("C:\\docs\\a.md");
+        expect(frame).toContain("Vault location");
+        expect(frame).toContain("Missing required fields: vault_path.");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("stays on home with no_match message for unrelated text", async () => {
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseManifestV1aFixture}
+      />
+    );
+
+    await vi.waitFor(
+      () => expect(lastFrame() ?? "").toContain("Describe your request"),
+      WAIT_OPTS
+    );
+
+    stdin.write("completely unrelated phrase");
+    await flushStdin();
+    stdin.write("\r");
+    await flushStdin();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("No matching action found.");
+        expect(frame).toContain("completely unrelated phrase");
+        expect(frame).toContain("Check knowledge base status");
       },
       WAIT_OPTS
     );

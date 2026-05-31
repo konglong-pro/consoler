@@ -26,6 +26,8 @@ The product-facing task language exposed by a Console Variant. It should describ
 
 A curated definition that binds a Console Variant to its allowed agent scope, default action context, and product-facing labels. It may include one agent or a product-specific set of agents, but the user experience is still organized around product actions rather than agent discovery. It is maintained as part of the product, not edited by ordinary users through a marketplace-style agent installation or search UI.
 
+Variant Configuration may include narrow `intentHints` for natural-language matching. These should be short action-level or field-level keyword arrays, including localized terms when useful; they should not be prompt examples, training samples, or protocol fields.
+
 ## Product Entry Point
 
 The normal way a user enters a Console Variant. It should open directly into the configured product context, while generic shell entry points may remain available for development, testing, and protocol debugging.
@@ -78,6 +80,10 @@ In the TUI, natural language is an entry path for creating an explicit action dr
 
 A candidate should seed the existing schema form with extracted args, not skip the form. Users must be able to review and edit those args before the action enters prepare, preview, approval, or execution.
 
+Product variant home screens may expose a persistent single-shot natural-language input such as "Describe what you want to do." It is an action-drafting entry, not a chat transcript, and should immediately route to a candidate form or clarification/form path.
+
+The first version should keep the explicit product action list alongside natural-language input. Natural language is an acceleration path, not the only way to start an action, and the action list remains the reliable fallback and discoverability surface.
+
 ## Intent Draft
 
 One proposed explicit action derived from natural language. It represents a single candidate `ActionDraft`, not a workflow, DAG, or automatic sequence of actions.
@@ -89,6 +95,12 @@ In the first version, raw natural language input and Intent Drafts are ephemeral
 A non-terminal intent drafting result that says the mapper could not produce a reliable complete Intent Draft. In the first version, clarification routes users to the existing schema form instead of starting a multi-turn natural-language conversation.
 
 The first version may include deterministic clarification text such as missing required fields, ambiguous command matches, or ambiguous argument-field matches. This text is explanatory only; it does not start a multi-turn chat loop.
+
+Stable `needs_clarification` reason codes for the first version are `no_match`, `ambiguous_command`, `missing_required_args`, `ambiguous_args`, and `unsupported_schema`. TUI and CLI copy should map from these codes instead of parsing free-form text.
+
+For intent mapping, `unsupported_schema` means the command input schema is outside the first mapper's simple extraction surface. The first version supports top-level object schemas with primitive fields, required fields, and light enum/default handling; nested objects, arrays of objects, composition keywords such as `oneOf`/`anyOf`/`allOf`, `patternProperties`, and conditional schemas should fall back to the schema form.
+
+The first version does not interpret one natural-language input as multiple files, multiple targets, or multiple actions. For a single-file command such as `indbase.ingest_file`, inputs that clearly mention several source files should return `needs_clarification` with `ambiguous_args` and route to the schema form.
 
 ## Intent Mapper
 
@@ -102,7 +114,15 @@ A neutral runtime input that describes which agents and commands the mapper may 
 
 Product-facing labels and descriptions in an Intent Scope are matching hints only, not protocol fields. A successful Intent Draft still outputs protocol-level `agent_id`, command, and args.
 
+Chinese or other localized matching hints should come from the Console Variant's product configuration when that variant is built into an Intent Scope, not from `AgentManifest` or protocol schemas.
+
 Developer tooling such as `agentctl intent-draft` should default to human-readable debug output and expose stable machine-readable output through `--json`. The debug output may show outcome, reason, matched product action, protocol agent/command, and prefilled args.
+
+Stable intent-draft JSON should name extracted form seed values `prefilled_args`, not `args`, because they are reviewable initial values for the schema form rather than final approved action arguments.
+
+## `draftIntent`
+
+A pure runtime mapper API shaped as `draftIntent({ text, scope })`. Callers build the neutral `IntentScope`; `draftIntent` does not read the registry, import Variant config, read the filesystem, or spawn agents. It returns an `IntentDraftResult` with either `candidate` or `needs_clarification`.
 
 ## Deterministic Intent Mapper
 
@@ -111,6 +131,12 @@ The first Intent Mapper implementation. It uses deterministic matching against m
 The first mapper may conservatively extract obvious literal arguments such as quoted strings, Windows or Unix paths, URLs, numbers, and boolean words. It only assigns them to high-confidence schema fields such as `file_path`, `path`, `url`, or `limit`; missing required fields, ambiguous field matches, and complex object arguments return `needs_clarification` and route to the schema form.
 
 The first mapper does not require natural-language-only fields in `AgentManifest` or protocol schemas. Matching should use existing command names, command descriptions, JSON Schema field names/descriptions, and the current Console Variant configuration.
+
+The first mapper should support basic Chinese natural-language input through deterministic keyword, substring, and path extraction when Chinese product labels or descriptions are present in the Intent Scope. It should not add translation, pinyin matching, language-model tokenization, or LLM semantic understanding in the first version.
+
+When several schema fields are path-like, path assignment must be conservative. For indbase-style commands, an import/file intent with one path may prefill `source_path` and leave `vault_path` missing; a vault/status/check intent with one path may prefill `vault_path`. Two paths should only be assigned when nearby keywords clearly distinguish vault-like and file-like paths; otherwise return `ambiguous_args`. The mapper should not infer `vault_path` from cwd, history, or prior actions in the first version.
+
+Intent mapping should not read the filesystem, check whether paths exist, classify paths as files or directories, or validate vault state. Environment reads belong to the existing schema validation, plan, preview, approval, and execution lifecycle.
 
 ## Probe Preview
 

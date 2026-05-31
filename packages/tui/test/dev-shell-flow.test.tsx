@@ -23,6 +23,7 @@ describe("TUI dev shell", () => {
         expect(frame).toContain("New Action");
         expect(frame).toContain("History");
         expect(frame).toContain("consoler TUI");
+        expect(frame).not.toContain("Describe your request");
       },
       WAIT_OPTS
     );

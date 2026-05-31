@@ -4,9 +4,20 @@ import path from "node:path";
 import { Command } from "commander";
 
 import { formatConformanceReport, runAgentConformance } from "@consoler/conformance";
-import { ConsolerRuntime, findConsolerRoot, type ActionHistoryStatus } from "@consoler/runtime";
+import {
+  ConsolerRuntime,
+  draftIntent,
+  findConsolerRoot,
+  loadRegistry,
+  type ActionHistoryStatus
+} from "@consoler/runtime";
 
 import { formatArtifactViewResult } from "./artifact-view.js";
+import {
+  buildIntentScopeFromManifests,
+  formatIntentDraftJson,
+  formatIntentDraftResult
+} from "./intent-draft.js";
 import { formatApprovalMaterial } from "./format.js";
 import { formatAgentctlHelp } from "./index.js";
 import { loadArgsFile, loadJsonValue } from "./json-load.js";
@@ -321,6 +332,52 @@ program
     }
     if (!result.ok) {
       const message = `${result.error.code}: ${result.error.message}`;
+      console.error(message);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("intent-draft")
+  .argument("<text...>", "Natural language text to map to a draft action")
+  .option("--agent <id>", "Limit intent scope to one discovered agent manifest")
+  .option("--json", "Emit structured IntentDraftResult JSON", false)
+  .description("Map natural language text to a draft action candidate (deterministic, no execution)")
+  .action(async (textParts: string[], options: { agent?: string; json?: boolean }) => {
+    const text = textParts.join(" ").trim();
+    if (!text) {
+      console.error("intent-draft requires non-empty text");
+      process.exitCode = 1;
+      return;
+    }
+
+    const runtime = createRuntime();
+    try {
+      let manifests;
+      if (options.agent) {
+        manifests = [await runtime.discover(options.agent)];
+      } else {
+        const registry = loadRegistry(resolveRegistryRoot());
+        const enabledAgents = registry.agents.filter((entry) => entry.enabled);
+        if (enabledAgents.length === 0) {
+          console.error("no enabled agents in registry");
+          process.exitCode = 1;
+          return;
+        }
+        manifests = await Promise.all(
+          enabledAgents.map((entry) => runtime.discover(entry.agent_id))
+        );
+      }
+
+      const scope = buildIntentScopeFromManifests(manifests);
+      const result = draftIntent({ text, scope });
+      if (options.json) {
+        console.log(formatIntentDraftJson(result));
+      } else {
+        console.log(formatIntentDraftResult(result));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error(message);
       process.exitCode = 1;
     }

@@ -29,6 +29,7 @@ On Windows, `python --version` must resolve to a real Python executable before r
 | --- | --- | --- |
 | Whitespace diff check | Linux | `git diff --check` against the PR/base range. |
 | V2 release gate | Linux | Runs the full fake-agent gate through `pnpm test:v2-release-gate`. |
+| V3b intent drafting gate | Linux | Runs `pnpm test:v3b-intent-gate` after the V2 gate (runtime mapper, `agentctl intent-draft`, TUI NL entry). |
 | Runtime focused tests | Windows | Keeps Windows coverage narrow and fast. |
 | Agentctl focused tests | Windows | Covers Windows process/SQLite behavior. |
 | TUI focused tests | Windows | Includes V2b artifact browser flow tests. |

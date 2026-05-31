@@ -3,6 +3,7 @@
 export interface VariantFieldLabel {
   label: string;
   help?: string;
+  intentHints?: string[];
 }
 
 export interface VariantActionDef {
@@ -12,6 +13,7 @@ export interface VariantActionDef {
   description?: string;
   agentId: string;
   command: string;
+  intentHints?: string[];
 }
 
 export interface VariantApprovalCopy {

@@ -28,6 +28,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - V1l redaction smoke: `pnpm test:redaction-smoke` (after `pnpm build`)
 - V1 release gate: `pnpm test:v1-release-gate`
 - V2 release gate: `pnpm test:v2-release-gate`
+- V3b intent drafting gate: `pnpm test:v3b-intent-gate`
 - Artifact retrieval smoke: `pnpm test:artifact-retrieval-smoke`
 - Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
@@ -43,6 +44,8 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Action replay: `pnpm agentctl -- replay <action_id>`
 - Action history: `pnpm agentctl -- history [--limit 20] [--command <name>] [--status <status>] [--json]`
 - Action trace: `pnpm agentctl -- trace <action_id> [--json]`
+- Intent draft (human): `pnpm agentctl -- intent-draft "check vault C:\vault" --agent indbase`
+- Intent draft (JSON): `pnpm agentctl -- intent-draft "import C:\docs\a.md" --agent indbase --json`
 - Agent conformance: `pnpm agentctl -- test <agent_id> [--command <name>] [--args <path>] [--approve-preview] [--approve] [--json]`
 - Ingest preview: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json`
 - Ingest probe: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview`
@@ -81,6 +84,10 @@ Prefer narrow validation for the changed package before broad checks.
 - V2b artifact browser / real-agent adoption: start in `docs/planning/v2b-artifact-browser-real-adoption.md`; wire TUI `artifact_view` + real `indbase` `get_artifact_view` on completed V2a `fetchArtifactView` without NL mapping.
 - V2c artifact retrieval closeout: start in `docs/planning/v2c-artifact-retrieval-closeout.md`; close the phase with local-only real artifact smoke coverage and testing docs without adding new feature scope.
 - Console Variant / product entrypoint: start in `docs/planning/v3a-console-variant-product-entrypoint.md`; keep core generic, add checked-in variant configuration and product TUI entrypoints, and do not turn consoler into an agent marketplace.
+- Natural language Intent Drafting: start in `docs/planning/v3b-natural-language-intent-drafting.md` and `docs/adr/0003-natural-language-intent-drafting.md`; add deterministic runtime `draftIntent`, `agentctl intent-draft`, and variant-scoped TUI entry without LLMs, protocol changes, raw-input persistence, or direct execution.
+- Runtime intent mapper slice: start in `docs/planning/v3b-runtime-intent-mapper.md`; implement only `packages/runtime` `draftIntent({ text, scope })` and focused runtime tests before CLI or TUI work.
+- Agentctl intent-draft slice: start in `docs/planning/v3b-agentctl-intent-draft.md`; wire `agentctl intent-draft` to the runtime mapper with human/`--json` output tests and no TUI, protocol, DB, or action lifecycle changes.
+- TUI product intent entry slice: start in `docs/planning/v3b-tui-product-intent-entry.md`; add variant-scoped NL input, `IntentScope` construction from checked-in variant config, and form prefill tests without protocol, DB, agentctl, direct execution, or `E:\indbase` changes.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -284,6 +291,39 @@ Prefer narrow validation for the changed package before broad checks.
   4. Add focused TUI tests for product labels and variant entry, and runtime tests if history filtering changes.
   5. Run `pnpm --filter @consoler/tui test`, relevant focused runtime tests, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
 
+- Natural language Intent Drafting change:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/planning/v3a-console-variant-product-entrypoint.md`, and `docs/planning/v3b-natural-language-intent-drafting.md`.
+  2. Keep `draftIntent({ text, scope })` pure and deterministic: no LLMs, network, filesystem reads, registry reads, agent spawn, or raw natural-language/Intent Draft persistence.
+  3. Runtime consumes a neutral `IntentScope`; do not import `ConsoleVariantConfig` into runtime/protocol and do not add NL-only fields to `AgentManifest`.
+  4. Candidate output uses `prefilled_args` to seed the editable schema form; it must not directly prepare, preview, approve, or execute.
+  5. Use only first-version `needs_clarification` reason codes: `no_match`, `ambiguous_command`, `missing_required_args`, `ambiguous_args`, and `unsupported_schema`.
+  6. Add focused runtime tests for matching, reason codes, schema limits, path ambiguity, and localized hints; add agentctl tests for human/`--json`; add TUI tests for variant-scoped NL entry, form prefill, and fallback.
+  7. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test`, `pnpm --filter @consoler/tui test`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+
+- Runtime intent mapper slice:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/planning/v3b-natural-language-intent-drafting.md`, and `docs/planning/v3b-runtime-intent-mapper.md`.
+  2. Touch only `packages/runtime/src/intent-draft*.ts`, `packages/runtime/src/index.ts`, and focused runtime tests unless the brief exposes a necessary adjacent change.
+  3. Do not edit `packages/protocol`, `packages/agentctl`, `packages/tui`, DB schema, registry code, or `E:\indbase`.
+  4. Keep `draftIntent` pure: no registry/store/runtime instances, filesystem, process spawn, network, LLMs, or persistence.
+  5. Test candidate output, all reason codes, schema support limits, path ambiguity, localized hints, and the `prefilled_args` public shape.
+  6. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/runtime typecheck`, `pnpm typecheck`, and `git diff --check`.
+
+- Agentctl intent-draft slice:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/planning/v3b-natural-language-intent-drafting.md`, `docs/planning/v3b-runtime-intent-mapper.md`, and `docs/planning/v3b-agentctl-intent-draft.md`.
+  2. Touch only `packages/agentctl/src/`, `packages/agentctl/test/`, `scripts/test-agentctl-smoke.mjs`, and help/docs needed for the command.
+  3. Do not edit `packages/tui`, `packages/protocol`, DB schema, Variant config, or `E:\indbase`; avoid runtime mapper changes unless a narrow bug is found.
+  4. `intent-draft` may discover manifests to build `IntentScope`, but must not create actions, runs, approvals, events, traces, or history rows.
+  5. Default output is human-readable; `--json` must emit stable runtime `IntentDraftResult` JSON. Both candidate and clarification outcomes exit 0.
+  6. Run `pnpm --filter @consoler/agentctl test`, `pnpm --filter @consoler/agentctl typecheck`, `pnpm --filter @consoler/runtime test`, `pnpm build`, `pnpm test:agentctl-smoke`, `pnpm test`, `pnpm typecheck`, and `git diff --check`.
+
+- TUI product intent entry slice:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/planning/v3a-console-variant-product-entrypoint.md`, `docs/planning/v3b-natural-language-intent-drafting.md`, `docs/planning/v3b-runtime-intent-mapper.md`, and `docs/planning/v3b-tui-product-intent-entry.md`.
+  2. Touch only `packages/tui/src/variant-types.ts`, `packages/tui/src/variants/`, `packages/tui/src/app.tsx`, focused TUI helper files, and focused TUI tests unless a narrow runtime mapper bug is proven.
+  3. Do not edit `packages/protocol`, `packages/agentctl`, DB schema, action lifecycle code, raw-input persistence, or `E:\indbase`.
+  4. Product NL input must remain single-shot and variant-scoped; candidates only prefill the existing schema form and must not prepare, preview, approve, execute, or create history/trace data.
+  5. Keep the explicit product action list as fallback and keep dev shell command selection generic.
+  6. Run `pnpm --filter @consoler/tui test`, `pnpm --filter @consoler/tui typecheck`, `pnpm --filter @consoler/runtime test`, `pnpm build`, `pnpm test`, `pnpm typecheck`, and `git diff --check`.
+
 ## Architecture Constraints
 
 - `consoler` never imports agent business logic. Agents are always out-of-process.
@@ -291,6 +331,9 @@ Prefer narrow validation for the changed package before broad checks.
 - Product-facing TUI entrypoints must enter through a checked-in Console Variant and host-product action labels; generic agent or command selection belongs to the development shell or audit/debug surfaces.
 - Console Variants may curate one agent or a product-specific agent set, but ordinary users must not install, search, or choose arbitrary agents inside the product TUI.
 - Variant-scoped history and action launch must respect the variant's allowed agent/command scope; trace, JSON, replay, and `agentctl` may expose raw protocol identifiers for auditability.
+- Natural-language Intent Drafting is an acceleration path only: it must remain deterministic, ephemeral, variant-scoped, and reviewable through the existing schema form.
+- `draftIntent({ text, scope })` is a pure runtime helper; product hints flow through `IntentScope`, while `ConsoleVariantConfig` stays outside runtime/protocol.
+- Intent candidates use `prefilled_args` and must not bypass `ActionDraft`, validation, plan, preview, approval, or execute.
 - Agent code must not inject frontend code. Agents return schemas, events, artifacts, and renderable blocks only.
 - LLM intent mapping is out of v0. LLMs must never bypass ActionDraft, validation, plan, preview, approval, and execute.
 - Preview is part of the action lifecycle. If a preview reads or mutates real environment state, model and approve it explicitly.
@@ -351,6 +394,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/testing/v1-release-gate.md`: V1 acceptance matrix, CI gates, local-only smokes, and V2+ exclusions.
 - `docs/testing/v2-release-gate.md`: V2 fake-agent release gate, CI gates, and local-only real-agent exclusions.
 - `docs/testing/v2-artifact-retrieval-closeout.md`: V2 artifact retrieval/browser closeout, frozen surface, and manual TUI smoke recipe.
+- `docs/testing/v3b-intent-gate.md`: V3b intent drafting acceptance gate (runtime mapper, agentctl, TUI NL entry).
 - `docs/planning/v1q-real-indbase-local-smokes.md`: local-only real indbase disposable smoke execution brief.
 - `docs/testing/real-indbase-smokes.md`: command and coverage for local real indbase smoke runs.
 - `docs/testing/v1-closeout.md`: V1 frozen surface, validation evidence, and V2 entry criteria.
@@ -360,6 +404,10 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v2b-artifact-browser-real-adoption.md`: TUI artifact browser and local-only real `indbase` retrieval adoption brief.
 - `docs/planning/v2c-artifact-retrieval-closeout.md`: artifact retrieval/browser closeout brief for real local smoke coverage and testing docs.
 - `docs/planning/v3a-console-variant-product-entrypoint.md`: Console Variant product entrypoint, indbase-adapted TUI surface, scoped history, and acceptance criteria.
+- `docs/planning/v3b-natural-language-intent-drafting.md`: deterministic intent mapper, `agentctl intent-draft`, variant-scoped TUI natural-language entry, and validation plan.
+- `docs/planning/v3b-runtime-intent-mapper.md`: runtime-only deterministic intent mapper slice, public result shape, matching rules, and focused runtime tests.
+- `docs/planning/v3b-agentctl-intent-draft.md`: CLI-only `agentctl intent-draft` slice, human/JSON output, scope construction, and smoke coverage.
+- `docs/planning/v3b-tui-product-intent-entry.md`: TUI-only product NL entry slice, variant `intentHints`, `IntentScope` helper, form prefill behavior, and focused tests.
 
 ## Done Means
 

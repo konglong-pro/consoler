@@ -19,6 +19,7 @@ import type {
 } from "@consoler/runtime";
 import {
   ConsolerRuntime,
+  draftIntent,
   requiresPreviewApproval,
   type PreparedAction,
   type PreparedExecutionControl,
@@ -38,6 +39,7 @@ import {
   historyListOptions
 } from "./variant-display.js";
 import type { ConsoleVariantConfig } from "./variant-types.js";
+import { buildIntentScopeFromVariant } from "./intent-scope.js";
 import { assertVariantManifestOrExit } from "./variant-validation.js";
 
 import { blocksFromEvents, EventLine, RenderableBlockView } from "./blocks.js";
@@ -75,6 +77,26 @@ type TabId = "logs" | "events" | "json" | "replay";
 type ArtifactOpenSource = "trace" | "finished";
 
 const TABS: TabId[] = ["logs", "events", "json", "replay"];
+
+type HomeFocus = "nl" | "tasks";
+
+function mergePrefilledFormValues(
+  formFields: FormField[],
+  prefilledArgs?: Record<string, unknown>
+): Record<string, unknown> {
+  const defaults = defaultFormValues(formFields);
+  if (!prefilledArgs) {
+    return defaults;
+  }
+  const allowed = new Set(formFields.map((field) => field.name));
+  const merged = { ...defaults };
+  for (const [key, value] of Object.entries(prefilledArgs)) {
+    if (allowed.has(key)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
 
 export interface AppProps {
   replayActionId?: string;
@@ -133,6 +155,10 @@ export function App({
   const [interactionValues, setInteractionValues] = useState<Record<string, unknown>>({});
   const [interactionFocusedField, setInteractionFocusedField] = useState(0);
   const [focusedField, setFocusedField] = useState(0);
+  const [nlText, setNlText] = useState("");
+  const [homeFocus, setHomeFocus] = useState<HomeFocus>("nl");
+  const [homeNotice, setHomeNotice] = useState<string | null>(null);
+  const [formNotice, setFormNotice] = useState<string | null>(null);
   const [artifactSource, setArtifactSource] = useState<ArtifactOpenSource | null>(null);
   const [selectedArtifactIndex, setSelectedArtifactIndex] = useState(0);
   const [artifactViewState, setArtifactViewState] = useState<{
@@ -279,7 +305,10 @@ export function App({
     }
   };
 
-  const selectCommand = (commandName: string) => {
+  const selectCommand = (
+    commandName: string,
+    options?: { prefilledArgs?: Record<string, unknown>; formNotice?: string }
+  ) => {
     if (!manifest) return;
     const command = manifest.commands.find((c) => c.name === commandName);
     if (!command) {
@@ -287,11 +316,12 @@ export function App({
       return;
     }
     const formFields = fieldsFromCommand(command);
-    const defaults = defaultFormValues(formFields);
+    const merged = mergePrefilledFormValues(formFields, options?.prefilledArgs);
     setSelectedCommand(commandName);
     setFields(formFields);
-    formValuesRef.current = defaults;
-    setFormValues(defaults);
+    formValuesRef.current = merged;
+    setFormValues(merged);
+    setFormNotice(options?.formNotice ?? null);
     setPreviewApproval(null);
     setProbePreview(null);
     setPrepared(null);
@@ -309,8 +339,44 @@ export function App({
       setError(`Unknown task: ${actionId}`);
       return;
     }
+    setHomeNotice(null);
     selectCommand(action.command);
   };
+
+  const submitNaturalLanguage = useCallback(
+    (rawText?: string) => {
+      if (!variant || !manifest) return;
+      const text = (rawText ?? nlText).trim();
+      if (!text) {
+        setHomeNotice("Enter a request or press Tab to choose a task.");
+        return;
+      }
+      const result = draftIntent({
+        text,
+        scope: buildIntentScopeFromVariant(manifest, variant)
+      });
+      if (result.outcome === "candidate") {
+        setNlText("");
+        setHomeNotice(null);
+        selectCommand(result.candidate.command, {
+          prefilledArgs: result.candidate.prefilled_args
+        });
+        return;
+      }
+      if (result.reason === "missing_required_args" && result.partial_candidate) {
+        setNlText("");
+        setHomeNotice(null);
+        selectCommand(result.partial_candidate.command, {
+          prefilledArgs: result.partial_candidate.prefilled_args,
+          formNotice: result.message
+        });
+        return;
+      }
+      setHomeNotice(result.message);
+      setHomeFocus("tasks");
+    },
+    [manifest, nlText, variant]
+  );
 
   const loadHistory = () => {
     try {
@@ -560,6 +626,14 @@ export function App({
       exit();
       return;
     }
+    if (phase === "home" && productMode && key.tab && !key.shift && !key.ctrl) {
+      setHomeFocus((current) => (current === "nl" ? "tasks" : "nl"));
+      return;
+    }
+    if (phase === "home" && productMode && homeFocus === "nl" && key.return) {
+      submitNaturalLanguage();
+      return;
+    }
     if (
       phase === "running" &&
       pendingInteraction?.choices?.length &&
@@ -666,6 +740,8 @@ export function App({
         return;
       }
       if (phase === "command_select" || phase === "form") {
+        setFormNotice(null);
+        setHomeFocus("nl");
         setPhase("home");
         return;
       }
@@ -761,28 +837,60 @@ export function App({
         {phase === "home" ? (
           <Box flexDirection="column">
             <Text bold>{productMode ? "What would you like to do?" : "Start"}</Text>
-            <SelectInput
-              items={
-                productMode && variant
-                  ? [
-                      ...variant.actions.map((action) => ({
-                        label: action.label,
-                        value: `action:${action.id}`
-                      })),
-                      { label: "History", value: "history" }
-                    ]
-                  : [
-                      { label: "New Action", value: "new" },
-                      { label: "History", value: "history" }
-                    ]
-              }
-              onSelect={(item) => {
-                if (item.value === "history") loadHistory();
-                else if (item.value.startsWith("action:")) {
-                  selectProductAction(item.value.slice("action:".length));
-                } else setPhase("command_select");
-              }}
-            />
+            {productMode && variant ? (
+              <Box flexDirection="column" marginTop={1}>
+                <Text>Describe your request (Tab to choose a task)</Text>
+                {homeNotice ? <Text color="yellow">{homeNotice}</Text> : null}
+                <TextInput
+                  value={nlText}
+                  focus={homeFocus === "nl"}
+                  onChange={setNlText}
+                  onSubmit={(value) => submitNaturalLanguage(value)}
+                />
+                <Box flexDirection="column" marginTop={1}>
+                  <Text bold={homeFocus === "tasks"} dimColor={homeFocus === "nl"}>
+                    Tasks
+                  </Text>
+                  {homeFocus === "nl" ? (
+                    <Box flexDirection="column">
+                      {variant.actions.map((action) => (
+                        <Text key={action.id} dimColor>
+                          {action.label}
+                        </Text>
+                      ))}
+                      <Text dimColor>History</Text>
+                    </Box>
+                  ) : (
+                    <SelectInput
+                      items={[
+                        ...variant.actions.map((action) => ({
+                          label: action.label,
+                          value: `action:${action.id}`
+                        })),
+                        { label: "History", value: "history" }
+                      ]}
+                      onSelect={(item) => {
+                        if (item.value === "history") loadHistory();
+                        else if (item.value.startsWith("action:")) {
+                          selectProductAction(item.value.slice("action:".length));
+                        }
+                      }}
+                    />
+                  )}
+                </Box>
+              </Box>
+            ) : (
+              <SelectInput
+                items={[
+                  { label: "New Action", value: "new" },
+                  { label: "History", value: "history" }
+                ]}
+                onSelect={(item) => {
+                  if (item.value === "history") loadHistory();
+                  else setPhase("command_select");
+                }}
+              />
+            )}
           </Box>
         ) : null}
 
@@ -847,6 +955,7 @@ export function App({
                 ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} — details`
                 : "Action form (Tab/↑↓ move field, Enter continue)"}
             </Text>
+            {formNotice ? <Text color="yellow">{formNotice}</Text> : null}
             {!productMode ? (
               <Text dimColor>
                 Field {focusedField + 1}/{fields.length}: {fields[focusedField]?.name}
@@ -1070,7 +1179,9 @@ export function App({
       <Box marginTop={1}>
         <Text dimColor>
           {phase === "home"
-            ? "Enter select | Esc —"
+            ? productMode
+              ? "NL: Enter submit | Tab tasks | Enter select task | Esc —"
+              : "Enter select | Esc —"
             : phase === "history"
               ? "Enter trace | Esc home"
               : phase === "trace"

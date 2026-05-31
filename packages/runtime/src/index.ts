@@ -79,3 +79,11 @@ export {
 export { JsonRpcAgentClient, LineBufferParser, parseNdjsonLine } from "./transport/jsonrpc.js";
 export { loadRegistry, getEnabledAgent } from "./registry.js";
 export { consolerDataDir, databasePath, registryPath, findConsolerRoot } from "./paths.js";
+export { draftIntent } from "./intent-draft.js";
+export type {
+  IntentCandidate,
+  IntentClarificationReason,
+  IntentDraftResult,
+  IntentScope,
+  IntentScopeCommand
+} from "./intent-draft-types.js";

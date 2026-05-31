@@ -11,6 +11,7 @@ export function formatAgentctlHelp(): string {
     "  replay <action_id>",
     "  history [--limit 20] [--command <name>] [--status <status>] [--json]",
     "  artifact-view <action_id> <block_id> [--json]",
+    "  intent-draft <text...> [--agent <id>] [--json]",
     "  trace <action_id> [--json]",
     "",
     "Examples:",
@@ -23,6 +24,7 @@ export function formatAgentctlHelp(): string {
     "  pnpm agentctl -- replay act_<uuid>",
     "  pnpm agentctl -- history --limit 10",
     "  pnpm agentctl -- artifact-view act_<uuid> conformance-artifact",
+    '  pnpm agentctl -- intent-draft "check vault C:\\vault" --agent indbase',
     "  pnpm agentctl -- trace act_<uuid> --json"
   ].join("\n");
 }

@@ -34,6 +34,20 @@ Accepted decisions:
 16. Intent scope may include product-facing labels and descriptions as matching hints. These hints are not protocol fields, and a successful candidate still outputs protocol-level `agent_id`, command, and args.
 17. A candidate seeds the existing schema form with extracted args. The user can review and edit those args before the action enters prepare, preview, approval, or execution.
 18. `agentctl intent-draft` should default to human-readable debug output and expose stable machine-readable output through `--json`.
+19. Stable intent-draft JSON should name extracted form seed values `prefilled_args`, not `args`, to avoid implying they are final approved action arguments.
+20. First-version `needs_clarification` reason codes are limited to `no_match`, `ambiguous_command`, `missing_required_args`, `ambiguous_args`, and `unsupported_schema`.
+21. First-version schema support is limited to top-level object schemas with primitive fields, required fields, and light enum/default handling. More complex schema constructs should return `unsupported_schema` and fall back to the schema form.
+22. One natural-language input must not expand into multiple files, multiple targets, or multiple actions in the first version. Multi-target input should return `needs_clarification`, usually with `ambiguous_args`.
+23. Basic Chinese natural-language input is in scope only through deterministic keyword, substring, and path extraction from Intent Scope labels or descriptions. Translation, pinyin matching, language-model tokenization, and LLM semantic understanding are out of scope for the first version.
+24. Localized matching hints should be supplied by Console Variant product configuration when building an Intent Scope, not by `AgentManifest` or protocol schemas.
+25. Console Variant configuration may include narrow `intentHints` as short action-level or field-level keyword arrays. These hints are not prompt examples, training samples, or protocol fields.
+26. Path assignment must be conservative when several schema fields are path-like. The mapper may prefill a single path into the path field indicated by the matched intent, but it must not infer missing paths from cwd, history, or prior actions; unclear multi-path input returns `ambiguous_args`.
+27. Intent mapping must not read the filesystem, check path existence, classify paths as files or directories, or validate vault state. Environment reads remain part of the existing lifecycle after user confirmation.
+28. Product variant home screens may include a persistent single-shot natural-language input, but it is not a chat transcript. Each submission routes immediately to a candidate form or clarification/form path.
+29. The explicit product action list remains in the first TUI version. Natural language is an acceleration path, not the only way to start an action.
+30. Implementation should be one larger phase split into independently verifiable slices: runtime deterministic mapper, `agentctl intent-draft`, then TUI product variant entry and form prefill.
+31. The runtime API should be a pure mapper named `draftIntent({ text, scope })`. The caller supplies the neutral `IntentScope`; the mapper does not read the registry, import Variant config, read the filesystem, or spawn agents.
+32. First-version implementation should live in `packages/runtime` as isolated intent-draft modules, not in a new package.
 
 ## Consequences
 
