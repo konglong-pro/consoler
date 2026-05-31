@@ -6,6 +6,34 @@ Implementation-free terms for the agent operations console.
 
 A generic console for operating out-of-process agents through shared protocol objects and lifecycle rules, not a product-specific UI for one agent.
 
+`consoler` core should stay generic so it can be adapted into different product-specific console variants. A deployed or embedded variant may be fully tailored to one host product or agent set, such as an `indbase`-adapted consoler, and should not present itself as a universal agent search interface unless that is the explicit product goal.
+
+## Console Variant
+
+A configured product version of consoler for a specific host or agent set. The variant chooses which agents are available and how they are presented before the user enters the TUI; users are not expected to search across arbitrary agents inside the product UI.
+
+Developer tooling such as `agentctl intent-draft` may expose explicit agent filters for debugging. Product TUI surfaces should instead respect the Console Variant's configured scope and avoid presenting arbitrary cross-agent search as the default interaction.
+
+## TUI Shell
+
+A reusable interface foundation for running the Runtime Lifecycle. It may support generic agent and command selection for development and debugging, but a product-facing experience should enter through a Console Variant that preconfigures the available agent scope and action context.
+
+## Product Action Surface
+
+The product-facing task language exposed by a Console Variant. It should describe actions in the host product's terms, such as checking an indbase vault or ingesting a file, rather than asking normal users to reason about `agent_id` and protocol command names. Natural-language entry points should ask in the host product's context and route uncertain drafts back to the variant's task surface, not to a cross-agent candidate list. Debugging surfaces may still show protocol identifiers for traceability.
+
+## Variant Configuration
+
+A curated definition that binds a Console Variant to its allowed agent scope, default action context, and product-facing labels. It may include one agent or a product-specific set of agents, but the user experience is still organized around product actions rather than agent discovery. It is maintained as part of the product, not edited by ordinary users through a marketplace-style agent installation or search UI.
+
+## Product Entry Point
+
+The normal way a user enters a Console Variant. It should open directly into the configured product context, while generic shell entry points may remain available for development, testing, and protocol debugging.
+
+## Audit Surface
+
+A traceability-focused surface such as trace, JSON, raw events, or artifact metadata. It may expose protocol identifiers and low-level lifecycle details so developers can debug and users can audit what happened, while the Product Action Surface remains organized around host-product tasks.
+
 ## Action Timeline
 
 The primary UI surface showing one action’s lifecycle in order: draft, plan, static preview, approval, live events, and result blocks. It is the main panel in the Ink TUI, not a separate history browser.
@@ -37,6 +65,52 @@ A read-only debugging surface for one `action_id`: action args, latest plan and 
 ## Runtime Lifecycle
 
 The ordered path managed by `@consoler/runtime`: discover, validate, plan, preview (static or probe), preview approval when required, execution approval, execute, persist events, and optional history/trace/replay reads. `agentctl` and the TUI share `prepareAction` and `executePrepared` so CLI and UI do not fork behavior.
+
+## Natural Language Intent Drafting
+
+A user-input helper that maps natural language into a candidate explicit action (`agent_id`, command, and args) plus confidence or clarification needs. It does not execute agents, approve actions, bypass validation, or replace the Runtime Lifecycle.
+
+The first version has two public outcomes only: `candidate` when exactly one complete single-action draft is reliable enough to continue, or `needs_clarification` when the mapper is ambiguous or incomplete. It does not expose ranked alternative candidates.
+
+The first version may use internal deterministic scores for thresholds and tests, but public results should not expose numeric confidence. Public output should communicate the outcome plus reason codes or explanatory text instead of model-like probability values.
+
+In the TUI, natural language is an entry path for creating an explicit action draft inside the current Console Variant, not a separate free-form chat surface. A candidate still flows through explicit user confirmation, schema validation, preview, approval, and execution.
+
+A candidate should seed the existing schema form with extracted args, not skip the form. Users must be able to review and edit those args before the action enters prepare, preview, approval, or execution.
+
+## Intent Draft
+
+One proposed explicit action derived from natural language. It represents a single candidate `ActionDraft`, not a workflow, DAG, or automatic sequence of actions.
+
+In the first version, raw natural language input and Intent Drafts are ephemeral helper state only. They are not persisted to the action store or history; only a user-confirmed action enters the existing Runtime Lifecycle and durable trace.
+
+## Intent Clarification
+
+A non-terminal intent drafting result that says the mapper could not produce a reliable complete Intent Draft. In the first version, clarification routes users to the existing schema form instead of starting a multi-turn natural-language conversation.
+
+The first version may include deterministic clarification text such as missing required fields, ambiguous command matches, or ambiguous argument-field matches. This text is explanatory only; it does not start a multi-turn chat loop.
+
+## Intent Mapper
+
+The consoler-owned component that uses agent manifests, command descriptions, and argument schemas to produce an Intent Draft from natural language. Agents do not receive natural-language input in the first version of intent drafting.
+
+Intent mapping runs inside the configured Console Variant's agent scope. For example, an `indbase`-adapted consoler should map language to the configured indbase commands, not ask the user to search for or choose among unrelated agents.
+
+## Intent Scope
+
+A neutral runtime input that describes which agents and commands the mapper may consider, plus product-facing labels or descriptions when available. TUI variants and developer tools can both build an Intent Scope, but the runtime mapper should not import or depend on `ConsoleVariantConfig`.
+
+Product-facing labels and descriptions in an Intent Scope are matching hints only, not protocol fields. A successful Intent Draft still outputs protocol-level `agent_id`, command, and args.
+
+Developer tooling such as `agentctl intent-draft` should default to human-readable debug output and expose stable machine-readable output through `--json`. The debug output may show outcome, reason, matched product action, protocol agent/command, and prefilled args.
+
+## Deterministic Intent Mapper
+
+The first Intent Mapper implementation. It uses deterministic matching against manifest command names, descriptions, and argument schemas; it does not call an LLM or require model credentials.
+
+The first mapper may conservatively extract obvious literal arguments such as quoted strings, Windows or Unix paths, URLs, numbers, and boolean words. It only assigns them to high-confidence schema fields such as `file_path`, `path`, `url`, or `limit`; missing required fields, ambiguous field matches, and complex object arguments return `needs_clarification` and route to the schema form.
+
+The first mapper does not require natural-language-only fields in `AgentManifest` or protocol schemas. Matching should use existing command names, command descriptions, JSON Schema field names/descriptions, and the current Console Variant configuration.
 
 ## Probe Preview
 

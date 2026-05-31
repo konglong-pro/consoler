@@ -31,6 +31,14 @@ import { artifactBlocksFromList } from "./artifact-utils.js";
 import { historyItemDetail, historyItemLabel } from "./history-label.js";
 import { ResultBlocksPanel } from "./result-blocks-panel.js";
 import { TracePanel } from "./trace-panel.js";
+import {
+  actionProductLabel,
+  fieldDisplayHelp,
+  fieldDisplayLabel,
+  historyListOptions
+} from "./variant-display.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
+import { assertVariantManifestOrExit } from "./variant-validation.js";
 
 import { blocksFromEvents, EventLine, RenderableBlockView } from "./blocks.js";
 import {
@@ -48,7 +56,7 @@ import {
   type FormField
 } from "./schema-form.js";
 
-const AGENT_ID = "indbase";
+const DEV_SHELL_AGENT_ID = "indbase";
 
 type Phase =
   | "boot"
@@ -70,6 +78,8 @@ const TABS: TabId[] = ["logs", "events", "json", "replay"];
 
 export interface AppProps {
   replayActionId?: string;
+  /** Product Console Variant; omit for generic dev shell. */
+  variant?: ConsoleVariantConfig;
   /** Injected runtime (tests) */
   runtime?: ConsolerRuntime;
   /** Skip agent discover and open home with this manifest (tests) */
@@ -84,6 +94,7 @@ export interface AppProps {
 
 export function App({
   replayActionId,
+  variant,
   runtime: runtimeProp,
   initialManifest,
   testTraceView,
@@ -92,6 +103,8 @@ export function App({
 }: AppProps) {
   const { exit } = useApp();
   const runtime = useMemo(() => runtimeProp ?? new ConsolerRuntime(), [runtimeProp]);
+  const productMode = Boolean(variant);
+  const agentId = variant?.defaultAgentId ?? DEV_SHELL_AGENT_ID;
 
   const [phase, setPhase] = useState<Phase>(replayActionId ? "replay" : "boot");
   const [tab, setTab] = useState<TabId>("events");
@@ -227,11 +240,14 @@ export function App({
     }
     if (testHistoryView) {
       if (initialManifest) setManifest(initialManifest);
-      setHistoryEntries(runtime.listActionHistory({ limit: 20 }));
+      setHistoryEntries(runtime.listActionHistory(historyListOptions(variant)));
       setPhase("history");
       return;
     }
     if (initialManifest) {
+      if (variant) {
+        assertVariantManifestOrExit(variant, initialManifest);
+      }
       setManifest(initialManifest);
       setPhase("home");
       return;
@@ -248,7 +264,12 @@ export function App({
   const bootstrap = async () => {
     try {
       setBusy(true);
-      const m = await runtime.discover(AGENT_ID);
+      const m = await runtime.discover(agentId);
+      if (variant) {
+        assertVariantManifestOrExit(variant, m);
+        const allowed = new Set(variant.allowedCommands);
+        m.commands = m.commands.filter((command) => allowed.has(command.name));
+      }
       setManifest(m);
       setPhase("home");
     } catch (err) {
@@ -281,9 +302,19 @@ export function App({
     setPhase("form");
   };
 
+  const selectProductAction = (actionId: string) => {
+    if (!variant) return;
+    const action = variant.actions.find((entry) => entry.id === actionId);
+    if (!action) {
+      setError(`Unknown task: ${actionId}`);
+      return;
+    }
+    selectCommand(action.command);
+  };
+
   const loadHistory = () => {
     try {
-      setHistoryEntries(runtime.listActionHistory({ limit: 20 }));
+      setHistoryEntries(runtime.listActionHistory(historyListOptions(variant)));
       setPhase("history");
       setError(null);
     } catch (err) {
@@ -329,7 +360,7 @@ export function App({
       setError(null);
       setBusy(true);
       try {
-        const input = { agentId: AGENT_ID, command: selectedCommand, args };
+        const input = { agentId, command: selectedCommand, args };
         const commandDef = manifest?.commands.find((c) => c.name === selectedCommand);
         if (commandDef && requiresPreviewApproval(commandDef)) {
           const gate = await runtime.preview(input, { approvePreview: false });
@@ -355,7 +386,16 @@ export function App({
         setBusy(false);
       }
     },
-    [closeExecutionControl, fields, manifest, probePreview, resetExecutionSession, runtime, selectedCommand]
+    [
+      agentId,
+      closeExecutionControl,
+      fields,
+      manifest,
+      probePreview,
+      resetExecutionSession,
+      runtime,
+      selectedCommand
+    ]
   );
 
   const approveProbePreview = async () => {
@@ -364,7 +404,7 @@ export function App({
     setBusy(true);
     try {
       const input = {
-        agentId: AGENT_ID,
+        agentId,
         command: selectedCommand,
         args: formValuesRef.current
       };
@@ -693,16 +733,20 @@ export function App({
   return (
     <Box flexDirection="column" padding={1}>
       <Text bold color="green">
-        consoler TUI —{" "}
+        {productMode ? variant!.productName : "consoler TUI"} —{" "}
         {phase === "home"
-          ? "home"
+          ? productMode
+            ? "tasks"
+            : "home"
           : phase === "history"
             ? "history"
             : phase === "trace"
               ? "trace"
               : phase === "artifact_view"
                 ? "artifact"
-                : selectedCommand ?? "select command"}
+                : actionProductLabel(variant, selectedCommand) ??
+                  selectedCommand ??
+                  (productMode ? "task" : "select command")}
       </Text>
       {busy ? (
         <Text color="yellow">
@@ -716,15 +760,27 @@ export function App({
 
         {phase === "home" ? (
           <Box flexDirection="column">
-            <Text bold>Start</Text>
+            <Text bold>{productMode ? "What would you like to do?" : "Start"}</Text>
             <SelectInput
-              items={[
-                { label: "New Action", value: "new" },
-                { label: "History", value: "history" }
-              ]}
+              items={
+                productMode && variant
+                  ? [
+                      ...variant.actions.map((action) => ({
+                        label: action.label,
+                        value: `action:${action.id}`
+                      })),
+                      { label: "History", value: "history" }
+                    ]
+                  : [
+                      { label: "New Action", value: "new" },
+                      { label: "History", value: "history" }
+                    ]
+              }
               onSelect={(item) => {
                 if (item.value === "history") loadHistory();
-                else setPhase("command_select");
+                else if (item.value.startsWith("action:")) {
+                  selectProductAction(item.value.slice("action:".length));
+                } else setPhase("command_select");
               }}
             />
           </Box>
@@ -738,7 +794,7 @@ export function App({
             ) : (
               <SelectInput
                 items={historyEntries.map((entry) => ({
-                  label: `${historyItemLabel(entry)}  ${historyItemDetail(entry)}`,
+                  label: `${historyItemLabel(entry, variant)}  ${historyItemDetail(entry)}`,
                   value: entry.action_id
                 }))}
                 onSelect={(item) => openTrace(item.value)}
@@ -762,6 +818,8 @@ export function App({
                 actionId={artifactViewState.actionId}
                 blockId={artifactViewState.blockId}
                 result={artifactViewState.result}
+                productMode={productMode}
+                {...(variant ? { variant } : {})}
               />
             ) : (
               <Text color="red">No artifact view result</Text>
@@ -769,7 +827,7 @@ export function App({
           </Box>
         ) : null}
 
-        {phase === "command_select" && manifest ? (
+        {phase === "command_select" && manifest && !productMode ? (
           <Box flexDirection="column">
             <Text bold>Select command (Esc home)</Text>
             <SelectInput
@@ -784,29 +842,49 @@ export function App({
 
         {phase === "form" ? (
           <Box flexDirection="column">
-            <Text bold>Action form (Tab/↑↓ move field, Enter continue)</Text>
-            <Text dimColor>
-              Field {focusedField + 1}/{fields.length}: {fields[focusedField]?.name}
+            <Text bold>
+              {productMode
+                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} — details`
+                : "Action form (Tab/↑↓ move field, Enter continue)"}
             </Text>
-            {fields.map((field, index) => (
-              <FormFieldRow
-                key={field.name}
-                field={field}
-                value={formValues[field.name]}
-                active={focusedField === index}
-                onChange={(v) => updateField(field.name, v)}
-                onSubmitValue={(v) => scheduleSubmitForm({ name: field.name, value: v })}
-              />
-            ))}
+            {!productMode ? (
+              <Text dimColor>
+                Field {focusedField + 1}/{fields.length}: {fields[focusedField]?.name}
+              </Text>
+            ) : null}
+            {fields.map((field, index) => {
+              const help = fieldDisplayHelp(variant, selectedCommand, field.name);
+              return (
+                <FormFieldRow
+                  key={field.name}
+                  field={field}
+                  value={formValues[field.name]}
+                  active={focusedField === index}
+                  displayLabel={fieldDisplayLabel(variant, selectedCommand, field.name)}
+                  {...(help ? { displayHelp: help } : {})}
+                  onChange={(v) => updateField(field.name, v)}
+                  onSubmitValue={(v) => scheduleSubmitForm({ name: field.name, value: v })}
+                />
+              );
+            })}
           </Box>
         ) : null}
 
-        {phase === "preview_approval" && previewApproval ? (
+        {phase === "preview_approval" && previewApproval && selectedCommand ? (
           <Box flexDirection="column">
-            <Text bold>Preview approval (y=probe, n=cancel)</Text>
-            <Text>approval_id: {previewApproval.approval_id}</Text>
+            <Text bold>
+              {productMode
+                ? (variant?.approvalCopy[selectedCommand]?.previewTitle ?? "Preview approval")
+                : "Preview approval (y=probe, n=cancel)"}
+            </Text>
+            {!productMode ? <Text>approval_id: {previewApproval.approval_id}</Text> : null}
             <Text dimColor>{previewApproval.material.plan_summary}</Text>
             <Text dimColor>Side effects: {previewApproval.material.side_effects.join(", ")}</Text>
+            {productMode ? (
+              <Text dimColor>
+                {variant?.approvalCopy[selectedCommand]?.previewPrompt ?? "y = continue, n = cancel"}
+              </Text>
+            ) : null}
           </Box>
         ) : null}
 
@@ -819,8 +897,12 @@ export function App({
 
         {prepared && (phase === "prepared" || phase === "running" || phase === "finished") ? (
           <Box flexDirection="column">
-            <Text bold>Action draft</Text>
-            <Text>action_id: {prepared.action.action_id}</Text>
+            <Text bold>
+              {productMode
+                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} — ready`
+                : "Action draft"}
+            </Text>
+            {!productMode ? <Text>action_id: {prepared.action.action_id}</Text> : null}
             <Box marginTop={1}>
               <Text bold>Plan</Text>
             </Box>
@@ -836,10 +918,21 @@ export function App({
               </Box>
             ) : null}
             <Box marginTop={1}>
-              <Text bold>Execution approval (y=execute, n=cancel)</Text>
+              <Text bold>
+                {productMode
+                  ? (variant?.approvalCopy[selectedCommand ?? ""]?.executeTitle ??
+                    "Execution approval")
+                  : "Execution approval (y=execute, n=cancel)"}
+              </Text>
             </Box>
-            <Text>approval_id: {prepared.approval.approval_id}</Text>
+            {!productMode ? <Text>approval_id: {prepared.approval.approval_id}</Text> : null}
             <Text dimColor>{prepared.approval.material.plan_summary}</Text>
+            {productMode ? (
+              <Text dimColor>
+                {variant?.approvalCopy[selectedCommand ?? ""]?.executePrompt ??
+                  "y = start, n = cancel"}
+              </Text>
+            ) : null}
           </Box>
         ) : null}
 
@@ -910,12 +1003,19 @@ export function App({
             {phase === "finished" ? (
               <ResultBlocksPanel
                 blocks={blocks}
-                title="Result blocks"
+                title={productMode ? "Results" : "Result blocks"}
                 selectedArtifactBlockId={selectedArtifactBlockId}
+                productMode={productMode}
+                {...(variant ? { variant } : {})}
               />
             ) : (
               blocks.map((block, index) => (
-                <RenderableBlockView key={`${block.block_id}-${index}`} block={block} />
+                <RenderableBlockView
+                  key={`${block.block_id}-${index}`}
+                  block={block}
+                  productMode={productMode}
+                  {...(variant ? { variant } : {})}
+                />
               ))
             )}
           </Box>
@@ -1009,16 +1109,22 @@ function FormFieldRow({
   field,
   value,
   active,
+  displayLabel,
+  displayHelp,
   onChange,
   onSubmitValue
 }: {
   field: FormField;
   value: unknown;
   active: boolean;
+  displayLabel?: string;
+  displayHelp?: string;
   onChange: (value: unknown) => void;
   onSubmitValue?: (value: string) => void;
 }) {
-  const label = `${field.name}${field.required ? " *" : ""}${field.description ? ` — ${field.description}` : ""}`;
+  const nameForLabel = displayLabel ?? field.name;
+  const help = displayHelp ?? field.description;
+  const label = `${nameForLabel}${field.required ? " *" : ""}${help ? ` — ${help}` : ""}`;
 
   if (field.kind === "number") {
     return (

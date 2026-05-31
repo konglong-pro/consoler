@@ -536,7 +536,14 @@ export class ConsolerStore {
     };
   }
 
-  listRecentActions(limit: number, command?: string): Array<{
+  listRecentActions(
+    limit: number,
+    filter: {
+      command?: string;
+      agentId?: string;
+      commands?: string[];
+    } = {}
+  ): Array<{
     action_id: string;
     agent_id: string;
     command: string;
@@ -547,9 +554,20 @@ export class ConsolerStore {
   }> {
     const clauses: string[] = [];
     const params: Record<string, unknown> = { limit };
-    if (command) {
+    if (filter.command) {
       clauses.push("a.command = @command");
-      params.command = command;
+      params.command = filter.command;
+    }
+    if (filter.agentId) {
+      clauses.push("a.agent_id = @agentId");
+      params.agentId = filter.agentId;
+    }
+    if (filter.commands?.length) {
+      const placeholders = filter.commands.map((_, index) => `@cmd${index}`);
+      clauses.push(`a.command IN (${placeholders.join(", ")})`);
+      filter.commands.forEach((command, index) => {
+        params[`cmd${index}`] = command;
+      });
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     return this.db

@@ -149,10 +149,21 @@ export function listActionHistory(
   options: ListActionHistoryOptions = {}
 ): ActionHistoryEntry[] {
   const limit = options.limit ?? DEFAULT_HISTORY_LIMIT;
-  const rows = store.listRecentActions(limit * 4, options.command);
+  const recentFilter: {
+    command?: string;
+    agentId?: string;
+    commands?: string[];
+  } = {};
+  if (options.command) recentFilter.command = options.command;
+  if (options.agentId) recentFilter.agentId = options.agentId;
+  if (options.commands?.length) recentFilter.commands = options.commands;
+  const rows = store.listRecentActions(limit * 4, recentFilter);
   const entries: ActionHistoryEntry[] = [];
 
   for (const row of rows) {
+    if (options.agentId && row.agent_id !== options.agentId) continue;
+    if (options.commands?.length && !options.commands.includes(row.command)) continue;
+
     const args = JSON.parse(row.args_json) as Record<string, unknown>;
     const status = deriveActionStatus(row.latest_run_id, row.latest_run_status);
     if (options.status && status !== options.status) continue;

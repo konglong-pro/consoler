@@ -40,7 +40,7 @@ The script removes the temp directory unless `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1
 
 ## Manual TUI Smoke
 
-After `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke`, use the printed `CONSOLER_ROOT` and `MANUAL_TUI_ACTION_ID` with `pnpm tui --`, then History → Trace → artifact block → Enter → Esc. Full steps are in `docs/testing/v2-artifact-retrieval-closeout.md`.
+After `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke`, use the printed `CONSOLER_ROOT` and `MANUAL_TUI_ACTION_ID` with `pnpm tui:indbase --` (product entry; variant-scoped history), then History → Trace → artifact block → Enter → Esc. The dev shell `pnpm tui --` remains for protocol-oriented command selection. Full steps are in `docs/testing/v2-artifact-retrieval-closeout.md`.
 
 ## Boundary
 

@@ -3,16 +3,22 @@ import { Box, Text } from "ink";
 import type { ArtifactView } from "@consoler/protocol";
 import type { FetchArtifactViewResult } from "@consoler/runtime";
 
+import { artifactKindLabel } from "./variant-display.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
 import { RenderableBlockView } from "./blocks.js";
 
 export function ArtifactViewPanel({
   actionId,
   blockId,
-  result
+  result,
+  productMode = false,
+  variant
 }: {
   actionId: string;
   blockId: string;
   result: FetchArtifactViewResult;
+  productMode?: boolean;
+  variant?: ConsoleVariantConfig;
 }) {
   if (!result.ok) {
     return (
@@ -38,15 +44,24 @@ export function ArtifactViewPanel({
       ? JSON.stringify(view.metadata)
       : null;
 
+  const productTitle =
+    view.title ?? artifactKindLabel(variant, view.kind) ?? "Artifact details";
+
   return (
     <Box flexDirection="column">
-      <Text bold>Artifact view</Text>
-      <Text>action_id: {actionId}</Text>
-      <Text>block_id: {blockId}</Text>
-      <Text>artifact_uri: {view.artifact_uri}</Text>
-      <Text>kind: {view.kind}</Text>
-      {view.title ? <Text>title: {view.title}</Text> : null}
-      {meta ? <Text dimColor>metadata: {meta}</Text> : null}
+      <Text bold>{productMode ? productTitle : "Artifact view"}</Text>
+      {productMode ? (
+        view.title ? <Text>{view.title}</Text> : null
+      ) : (
+        <>
+          <Text>action_id: {actionId}</Text>
+          <Text>block_id: {blockId}</Text>
+          <Text>artifact_uri: {view.artifact_uri}</Text>
+          <Text>kind: {view.kind}</Text>
+          {view.title ? <Text>title: {view.title}</Text> : null}
+          {meta ? <Text dimColor>metadata: {meta}</Text> : null}
+        </>
+      )}
       {view.truncated ? (
         <Text color="yellow">
           truncated{view.truncation_reason ? `: ${view.truncation_reason}` : ""}
@@ -59,7 +74,12 @@ export function ArtifactViewPanel({
       <Box marginTop={1} flexDirection="column">
         <Text bold>View blocks ({view.blocks.length})</Text>
         {view.blocks.map((block, index) => (
-          <RenderableBlockView key={`${block.block_id}-${index}`} block={block} />
+          <RenderableBlockView
+            key={`${block.block_id}-${index}`}
+            block={block}
+            productMode={productMode}
+            {...(variant ? { variant } : {})}
+          />
         ))}
       </Box>
     </Box>

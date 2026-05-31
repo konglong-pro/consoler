@@ -15,6 +15,10 @@ export type ActionHistoryStatus = "prepared" | "running" | "succeeded" | "failed
 export interface ListActionHistoryOptions {
   limit?: number;
   command?: string;
+  /** When set, only actions for this agent are returned. */
+  agentId?: string;
+  /** When set, only actions whose command is in this list are returned. */
+  commands?: string[];
   status?: ActionHistoryStatus;
 }
 

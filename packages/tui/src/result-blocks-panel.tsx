@@ -3,15 +3,20 @@ import { Box, Text } from "ink";
 import type { RenderableBlock } from "@consoler/protocol";
 
 import { RenderableBlockView } from "./blocks.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
 
 export function ResultBlocksPanel({
   blocks,
   title,
-  selectedArtifactBlockId
+  selectedArtifactBlockId,
+  productMode = false,
+  variant
 }: {
   blocks: RenderableBlock[];
   title: string;
   selectedArtifactBlockId?: string | null;
+  productMode?: boolean;
+  variant?: ConsoleVariantConfig;
 }) {
   if (!blocks.length) {
     return null;
@@ -29,6 +34,8 @@ export function ResultBlocksPanel({
           block={block}
           highlight={block.type === "artifact" && block.block_id === selectedArtifactBlockId}
           openable={block.type === "artifact"}
+          productMode={productMode}
+          {...(variant ? { variant } : {})}
         />
       ))}
     </Box>

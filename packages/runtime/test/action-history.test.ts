@@ -75,6 +75,31 @@ describe("action history and trace", () => {
     expect(entry?.latest_run_id).toBeNull();
   });
 
+  it("filters by agentId and allowed commands", () => {
+    store.saveAction({
+      action_id: "act_indbase",
+      agent_id: "indbase",
+      command: "indbase.doctor",
+      args: { vault_path: "/d" },
+      created_at: "2026-01-05T00:00:00.000Z"
+    });
+    store.saveAction({
+      action_id: "act_fake",
+      agent_id: "conformance-fake",
+      command: "conformance.echo",
+      args: { message: "hi" },
+      created_at: "2026-01-06T00:00:00.000Z"
+    });
+
+    const scoped = listActionHistory(store, {
+      limit: 10,
+      agentId: "indbase",
+      commands: ["indbase.doctor", "indbase.ingest_file"]
+    });
+    expect(scoped).toHaveLength(1);
+    expect(scoped[0]?.action_id).toBe("act_indbase");
+  });
+
   it("filters by command and status", () => {
     store.saveAction({
       action_id: "act_doctor",

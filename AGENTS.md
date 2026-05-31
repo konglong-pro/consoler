@@ -35,9 +35,11 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - TUI package test: `pnpm --filter @consoler/tui test`
 - Typecheck: `pnpm typecheck`
 - Build: `pnpm build`
-- TUI: `pnpm tui --` (manifest command select, dual approval for probe commands)
-- TUI replay: `pnpm tui -- --replay <action_id>`
-- TUI history: `pnpm tui --` → History → select action → Trace View
+- TUI dev shell: `pnpm tui --` (generic manifest command select; protocol-oriented labels)
+- TUI indbase product: `pnpm tui:indbase --` (or `pnpm tui -- --variant indbase`; product tasks and scoped history)
+- TUI replay: `pnpm tui -- --replay <action_id>` or `pnpm tui:indbase -- --replay <action_id>`
+- TUI history (dev): `pnpm tui --` → History → select action → Trace View
+- TUI history (indbase product): `pnpm tui:indbase --` → History (variant-scoped)
 - Action replay: `pnpm agentctl -- replay <action_id>`
 - Action history: `pnpm agentctl -- history [--limit 20] [--command <name>] [--status <status>] [--json]`
 - Action trace: `pnpm agentctl -- trace <action_id> [--json]`
@@ -78,6 +80,7 @@ Prefer narrow validation for the changed package before broad checks.
 - V2a artifact retrieval / browser: start in `docs/planning/v2a-artifact-retrieval-browser.md`; add generic agent-owned artifact viewing before natural language mapping.
 - V2b artifact browser / real-agent adoption: start in `docs/planning/v2b-artifact-browser-real-adoption.md`; wire TUI `artifact_view` + real `indbase` `get_artifact_view` on completed V2a `fetchArtifactView` without NL mapping.
 - V2c artifact retrieval closeout: start in `docs/planning/v2c-artifact-retrieval-closeout.md`; close the phase with local-only real artifact smoke coverage and testing docs without adding new feature scope.
+- Console Variant / product entrypoint: start in `docs/planning/v3a-console-variant-product-entrypoint.md`; keep core generic, add checked-in variant configuration and product TUI entrypoints, and do not turn consoler into an agent marketplace.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -274,10 +277,20 @@ Prefer narrow validation for the changed package before broad checks.
   4. Do a manual TUI smoke for form -> approval -> live events -> result -> replay.
   5. For artifact browsing, follow `docs/planning/v2b-artifact-browser-real-adoption.md` (Enter open, Esc back from `artifact_view`).
 
+- Console Variant / product entrypoint change:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, and `docs/planning/v3a-console-variant-product-entrypoint.md`.
+  2. Keep variant configuration checked in and product-curated; do not add user-facing agent install/search/marketplace UI.
+  3. Keep protocol identifiers visible in `agentctl`, trace, JSON, conformance, and other audit/debug surfaces.
+  4. Add focused TUI tests for product labels and variant entry, and runtime tests if history filtering changes.
+  5. Run `pnpm --filter @consoler/tui test`, relevant focused runtime tests, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+
 ## Architecture Constraints
 
 - `consoler` never imports agent business logic. Agents are always out-of-process.
 - The first real agent is `indbase`, but `consoler` must remain business-agnostic.
+- Product-facing TUI entrypoints must enter through a checked-in Console Variant and host-product action labels; generic agent or command selection belongs to the development shell or audit/debug surfaces.
+- Console Variants may curate one agent or a product-specific agent set, but ordinary users must not install, search, or choose arbitrary agents inside the product TUI.
+- Variant-scoped history and action launch must respect the variant's allowed agent/command scope; trace, JSON, replay, and `agentctl` may expose raw protocol identifiers for auditability.
 - Agent code must not inject frontend code. Agents return schemas, events, artifacts, and renderable blocks only.
 - LLM intent mapping is out of v0. LLMs must never bypass ActionDraft, validation, plan, preview, approval, and execute.
 - Preview is part of the action lifecycle. If a preview reads or mutates real environment state, model and approve it explicitly.
@@ -316,6 +329,7 @@ Prefer narrow validation for the changed package before broad checks.
 
 - `docs/adr/0001-agent-protocol-v0-boundaries.md`: accepted v0 architecture boundaries and non-goals.
 - `docs/adr/0002-agent-owned-artifact-retrieval.md`: V2a boundary for agent-owned artifact retrieval.
+- `docs/adr/0003-natural-language-intent-drafting.md`: accepted first-version boundary for deterministic natural language Intent Drafting.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
@@ -345,6 +359,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v2a-artifact-retrieval-browser.md`: generic artifact retrieval and browser execution brief.
 - `docs/planning/v2b-artifact-browser-real-adoption.md`: TUI artifact browser and local-only real `indbase` retrieval adoption brief.
 - `docs/planning/v2c-artifact-retrieval-closeout.md`: artifact retrieval/browser closeout brief for real local smoke coverage and testing docs.
+- `docs/planning/v3a-console-variant-product-entrypoint.md`: Console Variant product entrypoint, indbase-adapted TUI surface, scoped history, and acceptance criteria.
 
 ## Done Means
 

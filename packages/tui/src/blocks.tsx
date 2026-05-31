@@ -2,6 +2,9 @@ import { Box, Text } from "ink";
 
 import type { ActionEvent, RenderableBlock } from "@consoler/protocol";
 
+import { artifactKindLabel } from "./variant-display.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
+
 export function diffLineColor(line: string): "cyan" | "green" | "red" | undefined {
   if (line.startsWith("@@")) {
     return "cyan";
@@ -18,11 +21,15 @@ export function diffLineColor(line: string): "cyan" | "green" | "red" | undefine
 export function RenderableBlockView({
   block,
   highlight = false,
-  openable = false
+  openable = false,
+  productMode = false,
+  variant
 }: {
   block: RenderableBlock;
   highlight?: boolean;
   openable?: boolean;
+  productMode?: boolean;
+  variant?: ConsoleVariantConfig;
 }) {
   const title = block.title ? `[${block.title}] ` : "";
   const prefix = openable ? (highlight ? "> " : "  ") : "";
@@ -102,23 +109,38 @@ export function RenderableBlockView({
       art.metadata && Object.keys(art.metadata).length > 0
         ? JSON.stringify(art.metadata)
         : null;
+    const productTitle =
+      art.label ?? artifactKindLabel(variant, art.kind) ?? (art.kind ?? "Artifact");
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text bold color={highlight ? "green" : "cyan"}>
           {prefix}
-          {title}artifact{openable ? " (Enter)" : ""}
+          {title}
+          {productMode ? productTitle : `artifact${openable ? " (Enter)" : ""}`}
+          {productMode && openable ? " (Enter)" : null}
         </Text>
-        {highlight ? (
-          <Text color="green">
-            kind={art.kind ?? "?"} uri={art.uri ?? "?"}
-          </Text>
+        {productMode ? (
+          <>
+            {art.label ? <Text>{art.label}</Text> : null}
+            {!art.label && art.kind ? (
+              <Text dimColor>{artifactKindLabel(variant, art.kind)}</Text>
+            ) : null}
+          </>
         ) : (
-          <Text>
-            kind={art.kind ?? "?"} uri={art.uri ?? "?"}
-          </Text>
+          <>
+            {highlight ? (
+              <Text color="green">
+                kind={art.kind ?? "?"} uri={art.uri ?? "?"}
+              </Text>
+            ) : (
+              <Text>
+                kind={art.kind ?? "?"} uri={art.uri ?? "?"}
+              </Text>
+            )}
+            {art.label ? <Text>label={art.label}</Text> : null}
+          </>
         )}
-        {art.label ? <Text>label={art.label}</Text> : null}
-        {meta ? <Text dimColor>metadata={meta}</Text> : null}
+        {!productMode && meta ? <Text dimColor>metadata={meta}</Text> : null}
       </Box>
     );
   }

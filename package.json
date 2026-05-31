@@ -10,6 +10,7 @@
   "scripts": {
     "agentctl": "pnpm --filter @consoler/agentctl start",
     "tui": "pnpm --filter @consoler/tui start",
+    "tui:indbase": "pnpm --filter @consoler/tui start:indbase",
     "build": "pnpm -r build",
     "test": "pnpm -r --filter \"!@consoler/conformance\" test",
     "test:conformance": "node scripts/test-conformance.mjs",
