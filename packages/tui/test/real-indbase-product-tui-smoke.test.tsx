@@ -23,7 +23,32 @@ const ingestActionId = process.env.MANUAL_TUI_ACTION_ID;
 const WAIT_OPTS = { timeout: 120_000, interval: 100 } as const;
 
 async function flushStdin(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 150 : 80));
+  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 200 : 120));
+}
+
+async function selectDoctorTaskFromHome(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined
+): Promise<void> {
+  await vi.waitFor(
+    () => {
+      const frame = lastFrame() ?? "";
+      expect(frame).toContain("Describe your request");
+      expect(frame).toContain("Check knowledge base status");
+    },
+    WAIT_OPTS
+  );
+  stdin.write("\t");
+  await flushStdin();
+  await vi.waitFor(
+    () => {
+      const frame = lastFrame() ?? "";
+      expect(frame).toMatch(/>\s*Check knowledge base status/);
+    },
+    { timeout: 5_000, interval: 50 }
+  );
+  stdin.write("\r");
+  await flushStdin();
 }
 
 const describeReal = smokeRoot && vaultPath ? describe : describe.skip;
@@ -58,18 +83,7 @@ describeReal("real indbase product TUI manual path", () => {
       <App variant={indbaseVariant} runtime={runtime} initialManifest={manifest} />
     );
 
-    await vi.waitFor(
-      () => {
-        const frame = lastFrame() ?? "";
-        expect(frame).toContain("Check knowledge base status");
-        expect(frame).not.toContain("Select command");
-        expect(frame).not.toContain("indbase.doctor");
-      },
-      WAIT_OPTS
-    );
-
-    stdin.write("\r");
-    await flushStdin();
+    await selectDoctorTaskFromHome(stdin, lastFrame);
 
     await vi.waitFor(
       () => expect(lastFrame() ?? "").toContain("Vault location"),

@@ -20,6 +20,27 @@ describe("Console Variant contract", () => {
     }
   });
 
+  it("rejects product actions outside the variant agent scope", () => {
+    const errors = validateVariantAgainstManifest(
+      {
+        ...indbaseVariant,
+        actions: [
+          {
+            ...indbaseVariant.actions[0]!,
+            agentId: "conformance-fake"
+          }
+        ]
+      },
+      indbaseManifestV1aFixture
+    );
+    expect(errors).toContain(
+      "product action check_vault uses conformance-fake, which is not listed in allowedAgentIds"
+    );
+    expect(errors).toContain(
+      "product action check_vault uses conformance-fake, but manifest agent is indbase"
+    );
+  });
+
   it("indbase artifact kinds have product labels", () => {
     expect(indbaseVariant.artifactKindLabels).toMatchObject({
       "indbase.ingest_run": "File import run",

@@ -8,9 +8,13 @@ export function buildIntentScopeFromVariant(
   variant: ConsoleVariantConfig
 ): IntentScope {
   const allowedCommands = new Set(variant.allowedCommands);
+  const allowedAgents = new Set(variant.allowedAgentIds);
   const commands: IntentScopeCommand[] = [];
 
   for (const action of variant.actions) {
+    if (!allowedAgents.has(action.agentId) || action.agentId !== manifest.agent_id) {
+      continue;
+    }
     if (!allowedCommands.has(action.command)) {
       continue;
     }

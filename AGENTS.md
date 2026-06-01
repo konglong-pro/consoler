@@ -29,6 +29,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - V1 release gate: `pnpm test:v1-release-gate`
 - V2 release gate: `pnpm test:v2-release-gate`
 - V3b intent drafting gate: `pnpm test:v3b-intent-gate`
+- V3 closeout evidence: `docs/testing/v3-closeout.md`
 - Artifact retrieval smoke: `pnpm test:artifact-retrieval-smoke`
 - Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
@@ -298,7 +299,7 @@ Prefer narrow validation for the changed package before broad checks.
   4. Candidate output uses `prefilled_args` to seed the editable schema form; it must not directly prepare, preview, approve, or execute.
   5. Use only first-version `needs_clarification` reason codes: `no_match`, `ambiguous_command`, `missing_required_args`, `ambiguous_args`, and `unsupported_schema`.
   6. Add focused runtime tests for matching, reason codes, schema limits, path ambiguity, and localized hints; add agentctl tests for human/`--json`; add TUI tests for variant-scoped NL entry, form prefill, and fallback.
-  7. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test`, `pnpm --filter @consoler/tui test`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+  7. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test`, `pnpm --filter @consoler/tui test`, `pnpm test:v3b-intent-gate`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
 
 - Runtime intent mapper slice:
   1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/planning/v3b-natural-language-intent-drafting.md`, and `docs/planning/v3b-runtime-intent-mapper.md`.
@@ -322,7 +323,7 @@ Prefer narrow validation for the changed package before broad checks.
   3. Do not edit `packages/protocol`, `packages/agentctl`, DB schema, action lifecycle code, raw-input persistence, or `E:\indbase`.
   4. Product NL input must remain single-shot and variant-scoped; candidates only prefill the existing schema form and must not prepare, preview, approve, execute, or create history/trace data.
   5. Keep the explicit product action list as fallback and keep dev shell command selection generic.
-  6. Run `pnpm --filter @consoler/tui test`, `pnpm --filter @consoler/tui typecheck`, `pnpm --filter @consoler/runtime test`, `pnpm build`, `pnpm test`, `pnpm typecheck`, and `git diff --check`.
+  6. Run `pnpm --filter @consoler/tui test`, `pnpm --filter @consoler/tui typecheck`, `pnpm --filter @consoler/runtime test`, `pnpm test:v3b-intent-gate`, `pnpm build`, `pnpm test`, `pnpm typecheck`, and `git diff --check`.
 
 ## Architecture Constraints
 

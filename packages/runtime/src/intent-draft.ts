@@ -68,7 +68,7 @@ export function draftIntent(input: { text: string; scope: IntentScope }): Intent
 
   const top = ranked[0]!;
   const second = ranked[1];
-  if (second && top.score - second.score < AMBIGUITY_MARGIN) {
+  if (second && top.score - second.score <= AMBIGUITY_MARGIN) {
     return clarification("ambiguous_command", MESSAGES.ambiguous_command);
   }
 

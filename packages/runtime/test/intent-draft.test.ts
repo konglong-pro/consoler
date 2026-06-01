@@ -142,6 +142,32 @@ describe("draftIntent", () => {
     });
   });
 
+  it("returns ambiguous_command when the second-best command is exactly at the margin", () => {
+    const result = draftIntent({
+      text: "run",
+      scope: scopeWith(
+        {
+          agent_id: "fake",
+          command: "fake.primary",
+          command_description: "primary",
+          args_schema: { type: "object", properties: {} },
+          action_hints: ["run"]
+        },
+        {
+          agent_id: "fake",
+          command: "fake.run",
+          command_description: "secondary",
+          args_schema: { type: "object", properties: {} }
+        }
+      )
+    });
+    expect(result).toMatchObject({
+      outcome: "needs_clarification",
+      reason: "ambiguous_command",
+      message: "More than one action matched."
+    });
+  });
+
   it("returns unsupported_schema for nested object fields", () => {
     const result = draftIntent({
       text: "run nested",

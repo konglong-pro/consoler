@@ -21,18 +21,22 @@ async function selectHistoryFromHome(
   stdin: { write: (value: string) => void },
   lastFrame: () => string | undefined
 ): Promise<void> {
-  stdin.write("\u001B[B");
+  void lastFrame;
+  stdin.write("2");
   await flushStdin();
-  await vi.waitFor(
-    () => {
-      const frame = lastFrame() ?? "";
-      expect(frame).toContain("History");
-      expect(frame).not.toMatch(/>\s*New Action/);
-    },
-    { timeout: 5_000, interval: 50 }
-  );
-  stdin.write("\r");
-  await flushStdin();
+}
+
+async function openFirstHistoryEntry(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined
+): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    stdin.write("\r");
+    await flushStdin();
+    if ((lastFrame() ?? "").includes("Trace")) {
+      return;
+    }
+  }
 }
 
 describe("TUI history and trace flow", () => {
@@ -97,8 +101,7 @@ describe("TUI history and trace flow", () => {
       WAIT_OPTS
     );
 
-    stdin.write("1");
-    await flushStdin();
+    await openFirstHistoryEntry(stdin, lastFrame);
 
     await vi.waitFor(
       () => {

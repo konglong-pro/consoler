@@ -138,6 +138,12 @@ When several schema fields are path-like, path assignment must be conservative. 
 
 Intent mapping should not read the filesystem, check whether paths exist, classify paths as files or directories, or validate vault state. Environment reads belong to the existing schema validation, plan, preview, approval, and execution lifecycle.
 
+## LLM-assisted Intent Drafting
+
+A later Intent Drafting mode that may use a language model to improve natural-language understanding while still producing a reviewable Intent Draft or Intent Clarification. It remains an action-drafting helper, not a direct execution path, chat transcript, agent marketplace, or replacement for the Runtime Lifecycle.
+
+An LLM-assisted Intent Draft must still resolve to explicit protocol identifiers and reviewable prefilled form values before prepare, preview, approval, or execution can occur.
+
 ## Probe Preview
 
 A read-only preview (`probe_readonly`) that may inspect source files and open the vault database read-only for duplicate detection. It does not run validate/plan, write ingest plans, or mutate vault state. Requires preview approval before the runtime calls `agent.preview`.

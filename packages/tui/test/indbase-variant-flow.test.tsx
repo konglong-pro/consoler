@@ -23,7 +23,11 @@ async function typeNlAndSubmit(
   lastFrame: () => string | undefined,
   text: string
 ): Promise<void> {
-  stdin.write(text);
+  await flushStdin();
+  for (const char of text) {
+    stdin.write(char);
+    await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 5 : 1));
+  }
   await vi.waitFor(() => expect(lastFrame() ?? "").toContain(text), WAIT_OPTS);
   await flushStdin();
   stdin.write("\r");

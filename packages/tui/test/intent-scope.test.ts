@@ -44,6 +44,19 @@ describe("buildIntentScopeFromVariant", () => {
     expect(scope.commands.map((entry) => entry.command)).toEqual(["indbase.doctor"]);
   });
 
+  it("does not include actions outside the variant agent scope", () => {
+    const scope = buildIntentScopeFromVariant(indbaseManifestV1aFixture, {
+      ...indbaseVariant,
+      actions: [
+        {
+          ...indbaseVariant.actions[0]!,
+          agentId: "conformance-fake"
+        }
+      ]
+    });
+    expect(scope.commands).toEqual([]);
+  });
+
   it("indbase variant still validates against the v1a fixture manifest", () => {
     expect(validateVariantAgainstManifest(indbaseVariant, indbaseManifestV1aFixture)).toEqual([]);
   });

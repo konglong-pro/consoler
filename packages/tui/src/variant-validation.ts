@@ -10,6 +10,10 @@ export function validateVariantAgainstManifest(
   const manifestCommands = new Set(manifest.commands.map((command) => command.name));
   const errors: string[] = [];
 
+  if (!variant.allowedAgentIds.includes(manifest.agent_id)) {
+    errors.push(`manifest agent not in allowedAgentIds: ${manifest.agent_id}`);
+  }
+
   for (const command of variant.allowedCommands) {
     if (!manifestCommands.has(command)) {
       errors.push(`allowed command not in manifest: ${command}`);
@@ -17,6 +21,16 @@ export function validateVariantAgainstManifest(
   }
 
   for (const action of variant.actions) {
+    if (!variant.allowedAgentIds.includes(action.agentId)) {
+      errors.push(
+        `product action ${action.id} uses ${action.agentId}, which is not listed in allowedAgentIds`
+      );
+    }
+    if (action.agentId !== manifest.agent_id) {
+      errors.push(
+        `product action ${action.id} uses ${action.agentId}, but manifest agent is ${manifest.agent_id}`
+      );
+    }
     if (!manifestCommands.has(action.command)) {
       errors.push(
         `product action "${action.label}" (${action.id}) maps to missing command: ${action.command}`

@@ -77,6 +77,7 @@ Add a deterministic natural-language entry path that maps one user input into a 
 - Runtime focused check: `pnpm --filter @consoler/runtime test`
 - Agentctl focused check: `pnpm --filter @consoler/agentctl test`
 - TUI focused check: `pnpm --filter @consoler/tui test`
+- V3b closeout gate: `pnpm test:v3b-intent-gate`
 - Typecheck: `pnpm typecheck`
 - Build: `pnpm build`
 - Diff hygiene: `git diff --check`
@@ -98,7 +99,7 @@ Add a deterministic natural-language entry path that maps one user input into a 
 - Candidate results seed the existing schema form with editable `prefilled_args`; they do not directly prepare, preview, approve, or execute.
 - `needs_clarification` uses only the first-version reason codes and falls back to form/product action selection.
 - No `packages/protocol`, `AgentManifest`, or `E:\indbase` changes are required.
-- Focused runtime, agentctl, TUI tests plus typecheck, build, and `git diff --check` pass, or skipped checks are reported with reasons.
+- Focused runtime, agentctl, TUI tests, `pnpm test:v3b-intent-gate`, typecheck, build, and `git diff --check` pass, or skipped checks are reported with reasons.
 
 ## Unknowns
 
