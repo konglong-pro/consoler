@@ -1,5 +1,10 @@
 import type { AgentManifest } from "@consoler/protocol";
-import type { IntentDraftResult, IntentScope, IntentScopeCommand } from "@consoler/runtime";
+import type {
+  IntentDraftAssistedResult,
+  IntentDraftResult,
+  IntentScope,
+  IntentScopeCommand
+} from "@consoler/runtime";
 
 export function buildIntentScopeFromManifests(manifests: AgentManifest[]): IntentScope {
   const commands: IntentScopeCommand[] = [];
@@ -16,11 +21,15 @@ export function buildIntentScopeFromManifests(manifests: AgentManifest[]): Inten
   return { commands };
 }
 
-export function formatIntentDraftJson(result: IntentDraftResult): string {
+export function formatIntentDraftJson(
+  result: IntentDraftResult | IntentDraftAssistedResult
+): string {
   return JSON.stringify(result, null, 2);
 }
 
-export function formatIntentDraftResult(result: IntentDraftResult): string {
+export function formatIntentDraftResult(
+  result: IntentDraftResult | IntentDraftAssistedResult
+): string {
   if (result.outcome === "candidate") {
     const lines = [
       "Intent draft: candidate",
@@ -34,6 +43,10 @@ export function formatIntentDraftResult(result: IntentDraftResult): string {
     lines.push(JSON.stringify(result.candidate.prefilled_args, null, 2));
     if (result.message) {
       lines.push(`message: ${result.message}`);
+    }
+    if ("assist_notice" in result && result.assist_notice) {
+      lines.push(`assist_notice_code: ${result.assist_notice.code}`);
+      lines.push(`assist_notice_message: ${result.assist_notice.message}`);
     }
     return lines.join("\n");
   }
@@ -60,6 +73,10 @@ export function formatIntentDraftResult(result: IntentDraftResult): string {
   }
   if (result.unsupported_features?.length) {
     lines.push(`unsupported_features: ${result.unsupported_features.join(", ")}`);
+  }
+  if ("assist_notice" in result && result.assist_notice) {
+    lines.push(`assist_notice_code: ${result.assist_notice.code}`);
+    lines.push(`assist_notice_message: ${result.assist_notice.message}`);
   }
   return lines.join("\n");
 }

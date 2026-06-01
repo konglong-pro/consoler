@@ -6,7 +6,6 @@ import { Command } from "commander";
 import { formatConformanceReport, runAgentConformance } from "@consoler/conformance";
 import {
   ConsolerRuntime,
-  draftIntent,
   findConsolerRoot,
   loadRegistry,
   type ActionHistoryStatus
@@ -18,6 +17,7 @@ import {
   formatIntentDraftJson,
   formatIntentDraftResult
 } from "./intent-draft.js";
+import { runIntentDraft } from "./intent-draft-run.js";
 import { formatApprovalMaterial } from "./format.js";
 import { formatAgentctlHelp } from "./index.js";
 import { loadArgsFile, loadJsonValue } from "./json-load.js";
@@ -341,9 +341,14 @@ program
   .command("intent-draft")
   .argument("<text...>", "Natural language text to map to a draft action")
   .option("--agent <id>", "Limit intent scope to one discovered agent manifest")
+  .option("--assist", "Opt in to LLM-assisted intent drafting with deterministic fallback", false)
   .option("--json", "Emit structured IntentDraftResult JSON", false)
   .description("Map natural language text to a draft action candidate (deterministic, no execution)")
-  .action(async (textParts: string[], options: { agent?: string; json?: boolean }) => {
+  .action(
+    async (
+      textParts: string[],
+      options: { agent?: string; assist?: boolean; json?: boolean }
+    ) => {
     const text = textParts.join(" ").trim();
     if (!text) {
       console.error("intent-draft requires non-empty text");
@@ -370,7 +375,11 @@ program
       }
 
       const scope = buildIntentScopeFromManifests(manifests);
-      const result = draftIntent({ text, scope });
+      const result = await runIntentDraft({
+        text,
+        scope,
+        assist: Boolean(options.assist)
+      });
       if (options.json) {
         console.log(formatIntentDraftJson(result));
       } else {
@@ -381,7 +390,8 @@ program
       console.error(message);
       process.exitCode = 1;
     }
-  });
+  }
+  );
 
 program
   .command("trace")

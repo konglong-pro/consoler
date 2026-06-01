@@ -217,6 +217,24 @@ try {
     "intent-draft must not create actions"
   );
 
+  const assistNoProvider = runAgentctl(
+    ["intent-draft", "unrelated phrase", "--agent", FAKE_AGENT_ID, "--assist", "--json"],
+    { env }
+  );
+  if (assistNoProvider.status !== 0) {
+    fail(
+      `intent-draft --assist exited ${assistNoProvider.status}\nstdout: ${assistNoProvider.stdout}\nstderr: ${assistNoProvider.stderr}`
+    );
+  }
+  const assistResult = JSON.parse(assistNoProvider.stdout.trim());
+  assert.equal(assistResult.outcome, "needs_clarification");
+  assert.equal(assistResult.assist_notice?.code, "assisted_unavailable");
+  assert.equal(
+    JSON.parse(runAgentctl(["history", "--json"], { env }).stdout.trim()).length,
+    historyCountBeforeIntent,
+    "intent-draft --assist must not create actions"
+  );
+
   console.log("agentctl smoke passed");
 } finally {
   rmSync(tmpDir, { recursive: true, force: true });

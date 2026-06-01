@@ -19,6 +19,8 @@
     "test:v1-release-gate": "node scripts/test-v1-release-gate.mjs",
     "test:v2-release-gate": "node scripts/test-v2-release-gate.mjs",
     "test:v3b-intent-gate": "node scripts/test-v3b-intent-gate.mjs",
+    "test:v3c-assisted-intent-gate": "node scripts/test-v3c-assisted-intent-gate.mjs",
+    "test:v3c-tui-assisted-intent-gate": "node scripts/test-v3c-tui-assisted-intent-gate.mjs",
     "test:artifact-retrieval-smoke": "node scripts/test-artifact-retrieval-smoke.mjs",
     "test:real-indbase-smoke": "node scripts/test-real-indbase-smoke.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AgentManifest } from "@consoler/protocol";
 import type { IntentDraftResult } from "@consoler/runtime";
@@ -10,6 +10,7 @@ import {
   formatIntentDraftJson,
   formatIntentDraftResult
 } from "../src/intent-draft.js";
+import { runIntentDraft } from "../src/intent-draft-run.js";
 
 const fakeManifest: AgentManifest = {
   agent_id: "conformance-fake",
@@ -45,6 +46,7 @@ describe("agentctl intent-draft", () => {
     const help = formatAgentctlHelp();
     expect(help).toContain("intent-draft <text...>");
     expect(help).toContain("--agent <id>");
+    expect(help).toContain("--assist");
   });
 
   it("buildIntentScopeFromManifests converts manifest commands to IntentScope", () => {
@@ -95,6 +97,49 @@ describe("agentctl intent-draft", () => {
     expect(text).toContain("missing_required_args: vault_path");
     expect(text).toContain("partial_prefilled_args:");
     expect(text).toContain('"source_path": "C:\\\\docs\\\\a.md"');
+  });
+
+  it("runIntentDraft --assist uses injected provider without calling deterministic candidate path", async () => {
+    const scope = buildIntentScopeFromManifests([fakeManifest]);
+    const deterministic = await runIntentDraft({
+      text: 'static echo "hello"',
+      scope,
+      assist: false
+    });
+    expect(deterministic.outcome).toBe("candidate");
+
+    const suggest = vi.fn(async () => ({
+      agent_id: "conformance-fake",
+      command: "conformance.static_echo",
+      prefilled_args: { message: "assisted" }
+    }));
+    const assisted = await runIntentDraft({
+      text: "unrelated phrase",
+      scope,
+      assist: true,
+      provider: { suggest }
+    });
+    expect(suggest).toHaveBeenCalledOnce();
+    expect(assisted.outcome).toBe("candidate");
+    if (assisted.outcome !== "candidate") return;
+    expect(assisted.candidate.prefilled_args).toEqual({ message: "assisted" });
+  });
+
+  it("runIntentDraft --assist without provider adds assisted_unavailable notice", async () => {
+    const scope = buildIntentScopeFromManifests([fakeManifest]);
+    const assisted = await runIntentDraft({
+      text: "unrelated phrase",
+      scope,
+      assist: true,
+      provider: null
+    });
+    expect(assisted.outcome).toBe("needs_clarification");
+    expect(assisted.assist_notice?.code).toBe("assisted_unavailable");
+    const text = formatIntentDraftResult(assisted);
+    expect(text).toContain("assist_notice_code: assisted_unavailable");
+    const parsed = JSON.parse(formatIntentDraftJson(assisted));
+    expect(parsed.assist_notice.code).toBe("assisted_unavailable");
+    expect(JSON.stringify(parsed)).not.toMatch(/api[_-]?key|endpoint|model/i);
   });
 
   it("JSON output preserves runtime result shape", () => {

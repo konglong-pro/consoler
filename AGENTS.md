@@ -47,6 +47,10 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - Action trace: `pnpm agentctl -- trace <action_id> [--json]`
 - Intent draft (human): `pnpm agentctl -- intent-draft "check vault C:\vault" --agent indbase`
 - Intent draft (JSON): `pnpm agentctl -- intent-draft "import C:\docs\a.md" --agent indbase --json`
+- Intent draft (assisted): `pnpm agentctl -- intent-draft "import C:\docs\a.md" --agent indbase --assist`
+- V3c assisted intent gate: `pnpm test:v3c-assisted-intent-gate`
+- V3c TUI assisted intent gate: `pnpm test:v3c-tui-assisted-intent-gate`
+- Product TUI assisted NL (local): set `CONSOLER_TUI_ASSISTED_INTENT=1` and `CONSOLER_INTENT_PROVIDER_URL`, then `pnpm tui:indbase --`
 - Agent conformance: `pnpm agentctl -- test <agent_id> [--command <name>] [--args <path>] [--approve-preview] [--approve] [--json]`
 - Ingest preview: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json`
 - Ingest probe: `pnpm agentctl -- preview indbase indbase.ingest_file --args fixtures/ingest-args.json --approve-preview`
@@ -89,6 +93,8 @@ Prefer narrow validation for the changed package before broad checks.
 - Runtime intent mapper slice: start in `docs/planning/v3b-runtime-intent-mapper.md`; implement only `packages/runtime` `draftIntent({ text, scope })` and focused runtime tests before CLI or TUI work.
 - Agentctl intent-draft slice: start in `docs/planning/v3b-agentctl-intent-draft.md`; wire `agentctl intent-draft` to the runtime mapper with human/`--json` output tests and no TUI, protocol, DB, or action lifecycle changes.
 - TUI product intent entry slice: start in `docs/planning/v3b-tui-product-intent-entry.md`; add variant-scoped NL input, `IntentScope` construction from checked-in variant config, and form prefill tests without protocol, DB, agentctl, direct execution, or `E:\indbase` changes.
+- Assisted intent runtime/CLI slice: start in `docs/planning/v3c-assisted-intent-runtime-cli.md` and `docs/adr/0004-llm-assisted-intent-drafting.md`; add opt-in provider-assisted intent orchestration and `agentctl intent-draft --assist` with fake-provider gates, deterministic fallback, no protocol/DB/TUI changes, and no committed private provider details.
+- Assisted intent TUI slice: start in `docs/planning/v3c-assisted-intent-tui-entry.md` and `docs/adr/0004-llm-assisted-intent-drafting.md`; wire product TUI assisted drafting behind explicit local opt-in with transient notices, fake-provider tests, no dev-shell behavior change, and no committed private provider details.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -325,6 +331,22 @@ Prefer narrow validation for the changed package before broad checks.
   5. Keep the explicit product action list as fallback and keep dev shell command selection generic.
   6. Run `pnpm --filter @consoler/tui test`, `pnpm --filter @consoler/tui typecheck`, `pnpm --filter @consoler/runtime test`, `pnpm test:v3b-intent-gate`, `pnpm build`, `pnpm test`, `pnpm typecheck`, and `git diff --check`.
 
+- Assisted intent runtime/CLI slice:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/adr/0004-llm-assisted-intent-drafting.md`, `docs/planning/v3b-natural-language-intent-drafting.md`, and `docs/planning/v3c-assisted-intent-runtime-cli.md`.
+  2. Keep `draftIntent({ text, scope })` pure and deterministic; add assisted orchestration as an opt-in path around it, not inside it.
+  3. Touch only `packages/runtime/src/intent-draft*.ts`, `packages/runtime/src/index.ts`, `packages/agentctl/src/`, `packages/agentctl/test/`, focused runtime tests, gate scripts, and docs unless the brief exposes a necessary adjacent change.
+  4. Do not edit `packages/protocol`, `packages/tui`, DB schema, action lifecycle persistence, `AgentManifest`, or `E:\indbase`.
+  5. Use fake-provider coverage for default validation; do not require real provider credentials, network access, or private endpoint details in CI, docs, fixtures, snapshots, logs, PR descriptions, or release notes.
+  6. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test`, `pnpm test:v3c-assisted-intent-gate`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+
+- Assisted intent TUI slice:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/adr/0004-llm-assisted-intent-drafting.md`, `docs/planning/v3b-tui-product-intent-entry.md`, `docs/planning/v3c-assisted-intent-runtime-cli.md`, and `docs/planning/v3c-assisted-intent-tui-entry.md`.
+  2. Keep assisted product TUI opt-in explicit: require `CONSOLER_TUI_ASSISTED_INTENT=1` plus provider config before sending user input to a provider.
+  3. Touch only `packages/tui/src/`, focused TUI tests, shared provider-config helper files if needed, agentctl regression tests if helper behavior moves, gate scripts, and docs unless the brief exposes a necessary adjacent change.
+  4. Do not edit `packages/protocol`, DB schema, action lifecycle persistence, `AgentManifest`, dev-shell command selection behavior, or `E:\indbase`.
+  5. Use fake-provider or injected-provider coverage for default validation; do not require real provider credentials, network access, private endpoint details, or provider-specific fixtures in CI, docs, snapshots, logs, PR descriptions, or release notes.
+  6. Run `pnpm --filter @consoler/tui test`, `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test` if shared provider helper behavior changes, `pnpm test:v3c-tui-assisted-intent-gate`, `pnpm test:v3c-assisted-intent-gate`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+
 ## Architecture Constraints
 
 - `consoler` never imports agent business logic. Agents are always out-of-process.
@@ -334,6 +356,8 @@ Prefer narrow validation for the changed package before broad checks.
 - Variant-scoped history and action launch must respect the variant's allowed agent/command scope; trace, JSON, replay, and `agentctl` may expose raw protocol identifiers for auditability.
 - Natural-language Intent Drafting is an acceleration path only: it must remain deterministic, ephemeral, variant-scoped, and reviewable through the existing schema form.
 - `draftIntent({ text, scope })` is a pure runtime helper; product hints flow through `IntentScope`, while `ConsoleVariantConfig` stays outside runtime/protocol.
+- LLM-assisted Intent Drafting is opt-in and deterministic-first: provider suggestions must be validated into the existing reviewable Intent Drafting result shape, and private provider configuration must not be committed or leaked.
+- Product TUI assisted drafting requires explicit local opt-in and should only show transient non-sensitive notices, not persistent provider status or provider configuration.
 - Intent candidates use `prefilled_args` and must not bypass `ActionDraft`, validation, plan, preview, approval, or execute.
 - Agent code must not inject frontend code. Agents return schemas, events, artifacts, and renderable blocks only.
 - LLM intent mapping is out of v0. LLMs must never bypass ActionDraft, validation, plan, preview, approval, and execute.
@@ -409,6 +433,10 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/planning/v3b-runtime-intent-mapper.md`: runtime-only deterministic intent mapper slice, public result shape, matching rules, and focused runtime tests.
 - `docs/planning/v3b-agentctl-intent-draft.md`: CLI-only `agentctl intent-draft` slice, human/JSON output, scope construction, and smoke coverage.
 - `docs/planning/v3b-tui-product-intent-entry.md`: TUI-only product NL entry slice, variant `intentHints`, `IntentScope` helper, form prefill behavior, and focused tests.
+- `docs/planning/v3c-assisted-intent-runtime-cli.md`: runtime/CLI assisted intent slice, provider interface, fake-provider gate, `agentctl intent-draft --assist`, fallback behavior, and provider secret hygiene.
+- `docs/testing/v3c-assisted-intent-gate.md`: fake-provider V3c gate and local-only provider smoke boundary.
+- `docs/planning/v3c-assisted-intent-tui-entry.md`: product TUI assisted intent slice, explicit local opt-in, transient notices, fake-provider TUI tests, and dev-shell boundary.
+- `docs/testing/v3c-tui-assisted-intent-gate.md`: fake-provider TUI gate and local-only product TUI provider smoke boundary.
 
 ## Done Means
 

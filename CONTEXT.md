@@ -144,6 +144,22 @@ A later Intent Drafting mode that may use a language model to improve natural-la
 
 An LLM-assisted Intent Draft must still resolve to explicit protocol identifiers and reviewable prefilled form values before prepare, preview, approval, or execution can occur.
 
+LLM assistance is an opt-in enhancement path. When it is not configured, unavailable, timed out, or returns an unusable result, the product should retain a deterministic Intent Drafting fallback rather than requiring model credentials or network access for the normal console entry.
+
+## Intent Draft Orchestration
+
+The decision path that may combine the Deterministic Intent Mapper with optional LLM-assisted suggestions, validate the result, and choose a safe fallback. It produces the same public Intent Drafting outcomes as the rest of intent drafting and does not enter prepare, preview, approval, or execution.
+
+## LLM Intent Provider
+
+An opt-in source of model-backed drafting suggestions for LLM-assisted Intent Drafting. It may improve matching and argument extraction, but it does not own the Runtime Lifecycle and does not produce final approved action arguments.
+
+The normal console entry should not depend on an LLM Intent Provider being configured. Provider-specific credentials, models, timeouts, and transport details belong outside the Deterministic Intent Mapper.
+
+When LLM assistance is enabled, the user's raw natural-language input and the minimal current Intent Scope may be sent to the configured LLM Intent Provider. The provider context should not include action history, trace records, artifact content, vault contents, filesystem reads, database reads, prior user inputs, preview payloads, result payloads, or event streams unless a later plan explicitly changes that boundary.
+
+Provider endpoint details, credentials, model names, and other sensitive provider configuration are operational details, not product-domain language. They should stay out of committed docs, test fixtures, snapshots, logs, PR descriptions, and release notes unless they are deliberately public placeholders.
+
 ## Probe Preview
 
 A read-only preview (`probe_readonly`) that may inspect source files and open the vault database read-only for duplicate detection. It does not run validate/plan, write ingest plans, or mutate vault state. Requires preview approval before the runtime calls `agent.preview`.

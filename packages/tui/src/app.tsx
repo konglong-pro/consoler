@@ -20,7 +20,9 @@ import type {
 import {
   ConsolerRuntime,
   draftIntent,
+  draftIntentAssisted,
   requiresPreviewApproval,
+  type IntentDraftAssistedResult,
   type PreparedAction,
   type PreparedExecutionControl,
   type RuntimeEventHandlers,
@@ -39,6 +41,7 @@ import {
   historyListOptions
 } from "./variant-display.js";
 import type { ConsoleVariantConfig } from "./variant-types.js";
+import { resolveProductAssistedIntent, type ProductAssistedIntentConfig } from "./assisted-intent.js";
 import { buildIntentScopeFromVariant } from "./intent-scope.js";
 import { assertVariantManifestOrExit } from "./variant-validation.js";
 
@@ -80,6 +83,11 @@ const TABS: TabId[] = ["logs", "events", "json", "replay"];
 
 type HomeFocus = "nl" | "tasks";
 
+function joinNotices(...parts: Array<string | null | undefined>): string | undefined {
+  const messages = parts.filter((part): part is string => Boolean(part));
+  return messages.length > 0 ? messages.join(" ") : undefined;
+}
+
 function mergePrefilledFormValues(
   formFields: FormField[],
   prefilledArgs?: Record<string, unknown>
@@ -112,6 +120,8 @@ export interface AppProps {
   testPrepared?: PreparedAction;
   /** Test-only: open directly on history list (requires injected runtime + seeded store) */
   testHistoryView?: boolean;
+  /** Test-only: product assisted intent config (overrides process env) */
+  assistedIntent?: ProductAssistedIntentConfig;
 }
 
 export function App({
@@ -121,12 +131,22 @@ export function App({
   initialManifest,
   testTraceView,
   testPrepared,
-  testHistoryView
+  testHistoryView,
+  assistedIntent: assistedIntentProp
 }: AppProps) {
   const { exit } = useApp();
   const runtime = useMemo(() => runtimeProp ?? new ConsolerRuntime(), [runtimeProp]);
   const productMode = Boolean(variant);
   const agentId = variant?.defaultAgentId ?? DEV_SHELL_AGENT_ID;
+  const assistedIntent = useMemo((): ProductAssistedIntentConfig => {
+    if (!productMode) {
+      return { enabled: false, provider: null };
+    }
+    if (assistedIntentProp !== undefined) {
+      return assistedIntentProp;
+    }
+    return resolveProductAssistedIntent(process.env);
+  }, [productMode, assistedIntentProp]);
 
   const [phase, setPhase] = useState<Phase>(replayActionId ? "replay" : "boot");
   const [tab, setTab] = useState<TabId>("events");
@@ -159,6 +179,7 @@ export function App({
   const [homeFocus, setHomeFocus] = useState<HomeFocus>("nl");
   const [homeNotice, setHomeNotice] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [nlDraftingBusy, setNlDraftingBusy] = useState(false);
   const [artifactSource, setArtifactSource] = useState<ArtifactOpenSource | null>(null);
   const [selectedArtifactIndex, setSelectedArtifactIndex] = useState(0);
   const [artifactViewState, setArtifactViewState] = useState<{
@@ -344,39 +365,68 @@ export function App({
     selectCommand(action.command);
   };
 
+  const nlSubmitInFlightRef = useRef(false);
+
   const submitNaturalLanguage = useCallback(
-    (rawText?: string) => {
-      if (!variant || !manifest) return;
-      const text = (rawText ?? nlTextRef.current).trim();
-      if (!text) {
-        setHomeNotice("Enter a request or press Tab to choose a task.");
-        return;
-      }
-      const result = draftIntent({
-        text,
-        scope: buildIntentScopeFromVariant(manifest, variant)
-      });
-      if (result.outcome === "candidate") {
-        setNlText("");
+    async (rawText?: string) => {
+      if (!variant || !manifest || nlDraftingBusy || nlSubmitInFlightRef.current) return;
+      nlSubmitInFlightRef.current = true;
+      try {
+        const text = (rawText ?? nlTextRef.current).trim();
+        if (!text) {
+          setHomeNotice("Enter a request or press Tab to choose a task.");
+          return;
+        }
+
+        const applyIntentDraftResult = (result: IntentDraftAssistedResult) => {
+          const assistMessage = result.assist_notice?.message;
+          if (result.outcome === "candidate") {
+            setNlText("");
+            nlTextRef.current = "";
+            setHomeNotice(null);
+            selectCommand(result.candidate.command, {
+              prefilledArgs: result.candidate.prefilled_args
+            });
+            return;
+          }
+          if (result.reason === "missing_required_args" && result.partial_candidate) {
+            setNlText("");
+            nlTextRef.current = "";
+            setHomeNotice(null);
+            const partialNotice = joinNotices(result.message, assistMessage);
+            selectCommand(result.partial_candidate.command, {
+              prefilledArgs: result.partial_candidate.prefilled_args,
+              ...(partialNotice ? { formNotice: partialNotice } : {})
+            });
+            return;
+          }
+          setHomeNotice(joinNotices(result.message, assistMessage) ?? result.message);
+          setHomeFocus("tasks");
+        };
+
+        const scope = buildIntentScopeFromVariant(manifest, variant);
+        if (!assistedIntent.enabled) {
+          applyIntentDraftResult(draftIntent({ text, scope }));
+          return;
+        }
+
+        setNlDraftingBusy(true);
         setHomeNotice(null);
-        selectCommand(result.candidate.command, {
-          prefilledArgs: result.candidate.prefilled_args
-        });
-        return;
+        try {
+          const result = await draftIntentAssisted({
+            text,
+            scope,
+            provider: assistedIntent.provider
+          });
+          applyIntentDraftResult(result);
+        } finally {
+          setNlDraftingBusy(false);
+        }
+      } finally {
+        nlSubmitInFlightRef.current = false;
       }
-      if (result.reason === "missing_required_args" && result.partial_candidate) {
-        setNlText("");
-        setHomeNotice(null);
-        selectCommand(result.partial_candidate.command, {
-          prefilledArgs: result.partial_candidate.prefilled_args,
-          formNotice: result.message
-        });
-        return;
-      }
-      setHomeNotice(result.message);
-      setHomeFocus("tasks");
     },
-    [manifest, variant]
+    [assistedIntent, manifest, nlDraftingBusy, variant]
   );
 
   const loadHistory = () => {
@@ -631,10 +681,6 @@ export function App({
       setHomeFocus((current) => (current === "nl" ? "tasks" : "nl"));
       return;
     }
-    if (phase === "home" && productMode && homeFocus === "nl" && key.return) {
-      submitNaturalLanguage();
-      return;
-    }
     if (
       phase === "running" &&
       pendingInteraction?.choices?.length &&
@@ -825,7 +871,11 @@ export function App({
                   selectedCommand ??
                   (productMode ? "task" : "select command")}
       </Text>
-      {busy ? (
+      {nlDraftingBusy ? (
+        <Text color="yellow">
+          <Spinner type="dots" /> Drafting request...
+        </Text>
+      ) : busy ? (
         <Text color="yellow">
           <Spinner type="dots" /> Working...
         </Text>
@@ -844,14 +894,18 @@ export function App({
                 {homeNotice ? <Text color="yellow">{homeNotice}</Text> : null}
                 <TextInput
                   value={nlText}
-                  focus={homeFocus === "nl"}
+                  focus={homeFocus === "nl" && !nlDraftingBusy}
                   onChange={(value) => {
+                    if (nlDraftingBusy) return;
                     nlTextRef.current = value;
                     setNlText(value);
                   }}
                   onSubmit={(value) => {
+                    if (nlDraftingBusy) return;
                     nlTextRef.current = value;
-                    scheduleAfterInputFlush(() => submitNaturalLanguage(value));
+                    scheduleAfterInputFlush(() => {
+                      void submitNaturalLanguage(value);
+                    });
                   }}
                 />
                 <Box flexDirection="column" marginTop={1}>
