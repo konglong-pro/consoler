@@ -366,9 +366,13 @@ export function App({
   };
 
   const nlSubmitInFlightRef = useRef(false);
+  const lastNlSubmitAtRef = useRef(0);
 
   const submitNaturalLanguage = useCallback(
     async (rawText?: string) => {
+      const now = Date.now();
+      if (now - lastNlSubmitAtRef.current < 300) return;
+      lastNlSubmitAtRef.current = now;
       if (!variant || !manifest || nlDraftingBusy || nlSubmitInFlightRef.current) return;
       nlSubmitInFlightRef.current = true;
       try {
@@ -679,6 +683,16 @@ export function App({
     }
     if (phase === "home" && productMode && key.tab && !key.shift && !key.ctrl) {
       setHomeFocus((current) => (current === "nl" ? "tasks" : "nl"));
+      return;
+    }
+    if (
+      phase === "home" &&
+      productMode &&
+      homeFocus === "nl" &&
+      key.return &&
+      !nlDraftingBusy
+    ) {
+      void submitNaturalLanguage();
       return;
     }
     if (
