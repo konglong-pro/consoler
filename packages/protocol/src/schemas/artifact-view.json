@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://consoler.dev/schemas/v0/artifact-view.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_uri", "kind", "blocks"],
+  "properties": {
+    "artifact_uri": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "metadata": { "type": "object" },
+    "truncated": { "type": "boolean" },
+    "truncation_reason": { "type": "string" },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          { "$ref": "https://consoler.dev/schemas/v0/renderable-block.json" },
+          {
+            "not": {
+              "properties": { "type": { "const": "artifact" } },
+              "required": ["type"]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -2,6 +2,9 @@ import { Box, Text } from "ink";
 
 import type { ActionEvent, RenderableBlock } from "@consoler/protocol";
 
+import { artifactKindLabel } from "./variant-display.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
+
 export function diffLineColor(line: string): "cyan" | "green" | "red" | undefined {
   if (line.startsWith("@@")) {
     return "cyan";
@@ -15,8 +18,21 @@ export function diffLineColor(line: string): "cyan" | "green" | "red" | undefine
   return undefined;
 }
 
-export function RenderableBlockView({ block }: { block: RenderableBlock }) {
+export function RenderableBlockView({
+  block,
+  highlight = false,
+  openable = false,
+  productMode = false,
+  variant
+}: {
+  block: RenderableBlock;
+  highlight?: boolean;
+  openable?: boolean;
+  productMode?: boolean;
+  variant?: ConsoleVariantConfig;
+}) {
   const title = block.title ? `[${block.title}] ` : "";
+  const prefix = openable ? (highlight ? "> " : "  ") : "";
   if (block.type === "markdown") {
     const lines = String(block.content).split("\n");
     return (
@@ -63,7 +79,7 @@ export function RenderableBlockView({ block }: { block: RenderableBlock }) {
       to_label?: string;
       language?: string;
     };
-    const header = [diff.from_label, diff.to_label].filter(Boolean).join(" → ");
+    const header = [diff.from_label, diff.to_label].filter(Boolean).join(" -> ");
     const lines = (diff.unified_diff ?? "").split("\n");
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -93,16 +109,35 @@ export function RenderableBlockView({ block }: { block: RenderableBlock }) {
       art.metadata && Object.keys(art.metadata).length > 0
         ? JSON.stringify(art.metadata)
         : null;
+    const productTitle = artifactKindLabel(variant, art.kind) ?? (art.kind ?? "Artifact");
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold color="cyan">
-          {title}artifact
+        <Text bold color={highlight ? "green" : "cyan"}>
+          {prefix}
+          {title}
+          {productMode ? productTitle : `artifact${openable ? " (Enter)" : ""}`}
+          {productMode && openable ? " (Enter)" : null}
         </Text>
-        <Text>
-          kind={art.kind ?? "?"} uri={art.uri ?? "?"}
-        </Text>
-        {art.label ? <Text>label={art.label}</Text> : null}
-        {meta ? <Text dimColor>metadata={meta}</Text> : null}
+        {productMode ? (
+          <>
+            {art.label ? <Text>{art.label}</Text> : null}
+            {art.kind ? <Text dimColor>kind: {art.kind}</Text> : null}
+          </>
+        ) : (
+          <>
+            {highlight ? (
+              <Text color="green">
+                kind={art.kind ?? "?"} uri={art.uri ?? "?"}
+              </Text>
+            ) : (
+              <Text>
+                kind={art.kind ?? "?"} uri={art.uri ?? "?"}
+              </Text>
+            )}
+            {art.label ? <Text>label={art.label}</Text> : null}
+          </>
+        )}
+        {!productMode && meta ? <Text dimColor>metadata={meta}</Text> : null}
       </Box>
     );
   }

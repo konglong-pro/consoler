@@ -15,7 +15,7 @@ jobs:
   verify:
     name: typecheck and test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,10 +50,31 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python test deps
-        run: python -m pip install pytest
+        run: python -m pip install pytest build twine
 
-      - name: V1 release gate
-        run: pnpm test:v1-release-gate
+      - name: Python SDK package gate
+        run: pnpm test:python-sdk-package
+
+      - name: V2 release gate
+        run: pnpm test:v2-release-gate
+
+      - name: V3b intent drafting gate
+        run: pnpm test:v3b-intent-gate
+
+      - name: V3c assisted intent gate
+        run: pnpm test:v3c-assisted-intent-gate
+
+      - name: V3c TUI assisted intent gate
+        run: pnpm test:v3c-tui-assisted-intent-gate
+
+      - name: V4d indbase dogfood UX gate
+        run: pnpm test:v4d-indbase-dogfood-ux
+
+      - name: V4e indbase variant intent drafting gate
+        run: pnpm test:v4e-indbase-variant-intent-drafting
+
+      - name: V4g indbase NL v2 intent drafting gate
+        run: pnpm test:v4g-indbase-nl-v2-intent-drafting
 
   windows:
     name: windows focused
@@ -97,5 +118,14 @@ jobs:
       - name: Test Python SDK
         run: pnpm test:python-sdk
 
+      - name: Test TUI
+        run: pnpm --filter @consoler/tui test
+
+      - name: Test conformance harness
+        run: pnpm test:conformance
+
       - name: Test agentctl CLI smoke
         run: pnpm test:agentctl-smoke
+
+      - name: Test artifact retrieval smoke
+        run: pnpm test:artifact-retrieval-smoke

@@ -13,7 +13,8 @@
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/definitions/command" }
-    }
+    },
+    "artifact_retrieval": { "$ref": "#/definitions/artifact_retrieval" }
   },
   "definitions": {
     "command": {
@@ -72,6 +73,23 @@
         "kind": { "type": "string", "minLength": 1 },
         "scope": { "type": "string" },
         "description": { "type": "string" }
+      }
+    },
+    "artifact_retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri_schemes", "kinds"],
+      "properties": {
+        "uri_schemes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "kinds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
       }
     }
   }

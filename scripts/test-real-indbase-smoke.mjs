@@ -135,6 +135,111 @@ function assertInteraction(trace, expectedResponse, label) {
   assert.equal(interaction?.response, expectedResponse, `${label} interaction response`);
 }
 
+const REQUIRED_REAL_ARTIFACT_KINDS = ["indbase.ingest_run", "indbase.document"];
+const OPTIONAL_REAL_ARTIFACT_KINDS = ["indbase.document_revision"];
+
+const REAL_VIEW_MARKERS = {
+  "indbase.ingest_run": "# Ingest run",
+  "indbase.document": "# Document",
+  "indbase.document_revision": "# Revision"
+};
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readReplay(rootDir, actionId, label) {
+  const result = runAgentctl(["replay", actionId], {
+    env: { CONSOLER_ROOT: rootDir },
+    label: `${label} replay`
+  });
+  return result.stdout;
+}
+
+function assertArtifactViewSmoke(rootDir, actionId, block, label) {
+  const kind = block.content?.kind;
+  const result = runAgentctl(
+    ["artifact-view", actionId, block.block_id, "--json"],
+    { env: { CONSOLER_ROOT: rootDir }, label: `${label} artifact-view ${block.block_id}` }
+  );
+  const viewResult = parseJson(result.stdout, `${label} artifact-view`);
+  assert.equal(viewResult.ok, true, `${label} artifact-view failed: ${JSON.stringify(viewResult)}`);
+  assert.equal(viewResult.retrieval.status, "succeeded", `${label} retrieval status`);
+  assert.ok(viewResult.view?.blocks?.length > 0, `${label} view blocks empty`);
+  for (const viewBlock of viewResult.view.blocks) {
+    assert.notEqual(viewBlock.type, "artifact", `${label} nested artifact block`);
+  }
+  const marker = REAL_VIEW_MARKERS[kind];
+  if (marker) {
+    assert.match(
+      JSON.stringify(viewResult.view.blocks),
+      new RegExp(escapeRegExp(marker)),
+      `${label} view blocks missing expected marker`
+    );
+  }
+  return marker;
+}
+
+function assertTraceAndReplayFreeOfMarkers(rootDir, actionId, markers, label) {
+  const traceAfter = readTrace(rootDir, actionId, `${label} after retrieval`);
+  assert.ok(
+    traceAfter.artifact_retrievals?.length >= markers.length,
+    `${label} missing retrieval audit summaries`
+  );
+  const traceJson = JSON.stringify(traceAfter);
+  const replayText = readReplay(rootDir, actionId, label);
+  for (const marker of markers) {
+    if (!marker) continue;
+    assert.doesNotMatch(traceJson, new RegExp(escapeRegExp(marker)), `${label} trace leaked view content`);
+    assert.doesNotMatch(replayText, new RegExp(escapeRegExp(marker)), `${label} replay leaked view content`);
+  }
+}
+
+function findArtifactBlock(trace, kind) {
+  return (trace.result_blocks ?? []).find(
+    (block) => block.type === "artifact" && block.content?.kind === kind
+  );
+}
+
+function runRealArtifactRetrievalSmokes(rootDir, primaryActionId, sources, label) {
+  const opened = [];
+  const markersForPrimary = [];
+  const kindsToCheck = [...REQUIRED_REAL_ARTIFACT_KINDS, ...OPTIONAL_REAL_ARTIFACT_KINDS];
+  for (const kind of kindsToCheck) {
+    let fetched = false;
+    for (const source of sources) {
+      const block = findArtifactBlock(source.trace, kind);
+      if (!block?.block_id) continue;
+      const marker = assertArtifactViewSmoke(
+        rootDir,
+        source.actionId,
+        block,
+        `${source.label} ${kind}`
+      );
+      opened.push({ block_id: block.block_id, kind, action_id: source.actionId });
+      if (source.actionId === primaryActionId) {
+        markersForPrimary.push(marker);
+      }
+      fetched = true;
+      break;
+    }
+    if (!fetched && OPTIONAL_REAL_ARTIFACT_KINDS.includes(kind)) {
+      console.warn(
+        `Warning: optional artifact kind ${kind} not present in disposable smoke traces; skipping artifact-view check.`
+      );
+      continue;
+    }
+    assert.ok(
+      fetched,
+      `${label} missing artifact block for kind ${kind}; checked ${sources.map((s) => s.label).join(", ")}`
+    );
+  }
+  assertTraceAndReplayFreeOfMarkers(rootDir, primaryActionId, markersForPrimary, label);
+  return opened
+    .filter((item) => item.action_id === primaryActionId)
+    .map(({ block_id, kind }) => ({ block_id, kind }));
+}
+
 function initVault(indbaseRepo, vaultPath, env) {
   run(
     "uv",
@@ -149,25 +254,88 @@ function initVault(indbaseRepo, vaultPath, env) {
   );
 }
 
-function runIndbaseCancelTests(indbaseRepo, env) {
-  run(
+function prepareSourceTrustFixture(indbaseRepo, outputDir, env) {
+  const result = run(
     "uv",
     [
       "run",
-      "pytest",
-      "tests/test_indbase_agent.py::test_ingest_execute_passes_cancel_checkpoint_to_pipeline",
-      "tests/test_indbase_agent.py::test_ingest_execute_pipeline_cancel_propagates"
+      "python",
+      "scripts/v0323a_probe_stabilization_release_gate.py",
+      "--prepare-consoler-smoke",
+      outputDir
     ],
-    { cwd: indbaseRepo, env, label: "real indbase adapter cooperative cancel tests" }
+    {
+      cwd: indbaseRepo,
+      env,
+      capture: true,
+      label: "prepare indbase source trust fixture"
+    }
   );
+  const summary = parseJson(result.stdout, "prepare indbase source trust fixture");
+  assert.equal(summary.status, "passed", `source trust fixture status: ${result.stdout}`);
+  assert.ok(summary.search_args_path, "source trust fixture missing search_args_path");
+  assert.ok(existsSync(summary.search_args_path), "source trust search args file missing");
+  return summary;
+}
+
+function runSourceTrustSearchSmoke(rootDir, searchArgsPath) {
+  const reportResult = runAgentctl(
+    [
+      "test",
+      "indbase",
+      "--command",
+      "indbase.search_sources",
+      "--args",
+      searchArgsPath,
+      "--approve",
+      "--json"
+    ],
+    {
+      env: { CONSOLER_ROOT: rootDir },
+      label: "indbase.search_sources conformance"
+    }
+  );
+  const report = parseJson(reportResult.stdout, "indbase.search_sources conformance");
+  assert.equal(report.passed, true, `search conformance failed: ${reportResult.stdout}`);
+  assert.equal(
+    report.checks?.find((check) => check.id === "execution.diff_artifact_blocks")?.status,
+    "passed",
+    "search conformance diff/artifact expectation"
+  );
+
+  const search = runAction(
+    rootDir,
+    "indbase",
+    "indbase.search_sources",
+    searchArgsPath,
+    ["--approve"]
+  );
+  const searchTrace = readTrace(rootDir, search.action_id, "source trust search");
+  assertSucceeded(searchTrace, "source trust search");
+  assertHasBlock(searchTrace, "json", "source trust search");
+  assertHasBlock(searchTrace, "artifact", "source trust search");
+  const documentBlock = findArtifactBlock(searchTrace, "indbase.document");
+  assert.ok(documentBlock?.block_id, "source trust search missing document artifact");
+  const marker = assertArtifactViewSmoke(
+    rootDir,
+    search.action_id,
+    documentBlock,
+    "source trust search indbase.document"
+  );
+  assertTraceAndReplayFreeOfMarkers(rootDir, search.action_id, [marker], "source trust search");
+  return search.action_id;
+}
+
+function runIndbaseAdapterFocusedTests(indbaseRepo, env) {
   run(
     "uv",
     [
       "run",
       "pytest",
-      "tests/test_ingest_pipeline.py::test_m3_ingest_pipeline_cancelled_checkpoint_reraises_and_cancels_task"
+      "tests/test_indbase_agent.py",
+      "-q"
     ],
-    { cwd: indbaseRepo, env, label: "real indbase pipeline cooperative cancel test" }
+    { cwd: indbaseRepo, env, label: "real indbase adapter focused tests" }
   );
 }
 
@@ -220,6 +388,7 @@ const realRoot = path.join(tmpDir, "real-root");
 const fakeRoot = path.join(tmpDir, "fake-root");
 const vaultPath = path.join(tmpDir, "vault");
 const sourcePath = path.join(tmpDir, "note.md");
+const sourceTrustDir = path.join(tmpDir, "source-trust");
 const argsDir = path.join(tmpDir, "args");
 mkdirSync(argsDir, { recursive: true });
 
@@ -249,6 +418,7 @@ try {
   });
 
   initVault(indbaseRepo, vaultPath, { PYTHONPATH: realPythonPath });
+  const sourceTrust = prepareSourceTrustFixture(indbaseRepo, sourceTrustDir, { PYTHONPATH: realPythonPath });
   writeFileSync(sourcePath, "# Smoke note\n\nThis is disposable real indbase smoke content.\n", "utf8");
 
   const doctorArgs = path.join(argsDir, "doctor.json");
@@ -256,7 +426,7 @@ try {
   const skipResponse = path.join(argsDir, "skip-response.json");
   const continueResponse = path.join(argsDir, "continue-response.json");
   const fakeCancelArgs = path.join(argsDir, "fake-cancel.json");
-  writeJson(doctorArgs, { vault_path: vaultPath, hard_only: false });
+  writeJson(doctorArgs, { vault_path: vaultPath });
   writeJson(ingestArgs, { vault_path: vaultPath, source_path: sourcePath });
   writeJson(skipResponse, "skip");
   writeJson(continueResponse, "continue");
@@ -266,6 +436,8 @@ try {
   const doctorTrace = readTrace(realRoot, doctor.action_id, "doctor");
   assertSucceeded(doctorTrace, "doctor");
   assertHasBlock(doctorTrace, "json", "doctor");
+
+  const sourceTrustActionId = runSourceTrustSearchSmoke(realRoot, sourceTrust.search_args_path);
 
   const normal = runAction(
     realRoot,
@@ -278,7 +450,6 @@ try {
   assertSucceeded(normalTrace, "ingest normal");
   assertHasBlock(normalTrace, "diff", "ingest normal");
   assertHasBlock(normalTrace, "artifact", "ingest normal");
-
   const skip = runAction(
     realRoot,
     "indbase",
@@ -308,11 +479,27 @@ try {
   assertHasBlock(continueTrace, "diff", "duplicate continue");
   assertHasBlock(continueTrace, "artifact", "duplicate continue");
 
-  runIndbaseCancelTests(indbaseRepo, { PYTHONPATH: realPythonPath });
+  const manualArtifactBlocks = runRealArtifactRetrievalSmokes(
+    realRoot,
+    normal.action_id,
+    [
+      { actionId: normal.action_id, trace: normalTrace, label: "ingest normal" },
+      { actionId: continued.action_id, trace: continueTrace, label: "duplicate continue" }
+    ],
+    "real artifact-view"
+  );
+
+  runIndbaseAdapterFocusedTests(indbaseRepo, { PYTHONPATH: realPythonPath });
   runFakeCancelTimeoutSmoke(fakeRoot, fakeCancelArgs);
 
   console.log("\nreal indbase smoke passed");
   console.log(`Disposable vault: ${vaultPath}`);
+  if (keepTemp) {
+    console.log(`CONSOLER_ROOT=${realRoot}`);
+    console.log(`MANUAL_TUI_ACTION_ID=${normal.action_id}`);
+    console.log(`SOURCE_TRUST_ACTION_ID=${sourceTrustActionId}`);
+    console.log(`MANUAL_TUI_ARTIFACT_BLOCK_IDS=${JSON.stringify(manualArtifactBlocks)}`);
+  }
 } finally {
   if (keepTemp) {
     console.log(`Keeping smoke temp directory: ${tmpDir}`);

@@ -22,6 +22,7 @@ class ConformanceFakeAdapter(AgentAdapter):
     def validate(self, command: str, args: dict[str, Any]) -> None:
         if command not in {
             "conformance.static_echo",
+            "conformance.read_only_text",
             "conformance.probe_echo",
             "conformance.slow_cancel",
             "conformance.slow_ignore_cancel",
@@ -267,6 +268,17 @@ class ConformanceFakeAdapter(AgentAdapter):
                 ]
             }
 
+        if command == "conformance.read_only_text":
+            return {
+                "blocks": [
+                    markdown_block(f"# Read-only OK\n\n{args['message']}", title="result"),
+                    json_block(
+                        {"message": args["message"], "readonly": True},
+                        title="payload",
+                    ),
+                ]
+            }
+
         def work() -> dict[str, Any]:
             emitter.emit("log", message=f"message={args['message']}")
             emitter.emit("progress.updated", progress=0.5, message="halfway")
@@ -293,13 +305,43 @@ class ConformanceFakeAdapter(AgentAdapter):
                         title="sample-diff",
                     ),
                     artifact_block(
-                        "file:///tmp/conformance-fixture.txt",
-                        "text/plain",
+                        "fake://artifacts/conformance-fixture",
+                        "conformance.fixture",
                         label="fixture.txt",
                         metadata={"message": args["message"]},
                         title="sample-artifact",
+                        block_id="conformance-artifact",
                     ),
                 ]
             }
 
         return StepHelper(emitter).run("echo", "Echo message", work)
+
+    def get_artifact_view(
+        self,
+        *,
+        artifact_uri: str,
+        kind: str,
+        block_id: str,
+        action_id: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if kind != "conformance.fixture" or not artifact_uri.startswith("fake://"):
+            raise AgentError("artifact.not_found", f"Unknown artifact {artifact_uri}")
+        return {
+            "artifact_uri": artifact_uri,
+            "kind": kind,
+            "title": "Conformance fixture artifact",
+            "metadata": metadata or {},
+            "blocks": [
+                markdown_block("# Fixture artifact", title="view"),
+                json_block(
+                    {
+                        "action_id": action_id,
+                        "block_id": block_id,
+                        "artifact_uri": artifact_uri,
+                    },
+                    title="context",
+                ),
+            ],
+        }

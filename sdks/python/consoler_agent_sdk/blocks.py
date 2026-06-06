@@ -80,6 +80,7 @@ def artifact_block(
     label: str | None = None,
     metadata: dict[str, Any] | None = None,
     title: str | None = None,
+    block_id: str | None = None,
 ) -> dict[str, Any]:
     content: dict[str, Any] = {"uri": uri, "kind": kind}
     if label:
@@ -87,7 +88,7 @@ def artifact_block(
     if metadata:
         content["metadata"] = metadata
     block: dict[str, Any] = {
-        "block_id": f"blk_{uuid.uuid4()}",
+        "block_id": block_id or f"blk_{uuid.uuid4()}",
         "type": "artifact",
         "content": content,
     }

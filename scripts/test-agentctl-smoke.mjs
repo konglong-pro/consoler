@@ -159,6 +159,82 @@ try {
     fail(`expected run without --approve to exit 2, got ${awaitingApproval.status}`);
   }
 
+  const historyBeforeIntent = runAgentctl(["history", "--json"], { env });
+  if (historyBeforeIntent.status !== 0) {
+    fail(`history before intent-draft exited ${historyBeforeIntent.status}\nstderr: ${historyBeforeIntent.stderr}`);
+  }
+  const historyCountBeforeIntent = JSON.parse(historyBeforeIntent.stdout.trim()).length;
+
+  const intentJson = runAgentctl(
+    ["intent-draft", "static", "echo", '"hello"', "--agent", FAKE_AGENT_ID, "--json"],
+    { env }
+  );
+  if (intentJson.status !== 0) {
+    fail(`intent-draft --json exited ${intentJson.status}\nstdout: ${intentJson.stdout}\nstderr: ${intentJson.stderr}`);
+  }
+  let intentResult;
+  try {
+    intentResult = JSON.parse(intentJson.stdout.trim());
+  } catch {
+    fail(`intent-draft stdout is not JSON: ${intentJson.stdout}`);
+  }
+  assert.equal(intentResult.outcome, "candidate");
+  assert.equal(intentResult.candidate?.agent_id, FAKE_AGENT_ID);
+  assert.equal(intentResult.candidate?.command, "conformance.static_echo");
+  assert.equal(intentResult.candidate?.prefilled_args?.message, "hello");
+
+  const intentHuman = runAgentctl(
+    ["intent-draft", "static", "echo", '"hello"', "--agent", FAKE_AGENT_ID],
+    { env }
+  );
+  if (intentHuman.status !== 0) {
+    fail(`intent-draft human exited ${intentHuman.status}\nstderr: ${intentHuman.stderr}`);
+  }
+  assert.match(intentHuman.stdout, /Intent draft: candidate/);
+  assert.match(intentHuman.stdout, /agent_id: conformance-fake/);
+  assert.match(intentHuman.stdout, /command: conformance\.static_echo/);
+  assert.match(intentHuman.stdout, /prefilled_args:/);
+
+  const intentNoMatch = runAgentctl(
+    ["intent-draft", "unrelated phrase", "--agent", FAKE_AGENT_ID, "--json"],
+    { env }
+  );
+  if (intentNoMatch.status !== 0) {
+    fail(`intent-draft no_match exited ${intentNoMatch.status}\nstderr: ${intentNoMatch.stderr}`);
+  }
+  const noMatchResult = JSON.parse(intentNoMatch.stdout.trim());
+  assert.equal(noMatchResult.outcome, "needs_clarification");
+  assert.equal(noMatchResult.reason, "no_match");
+
+  const historyAfterIntent = runAgentctl(["history", "--json"], { env });
+  if (historyAfterIntent.status !== 0) {
+    fail(`history after intent-draft exited ${historyAfterIntent.status}\nstderr: ${historyAfterIntent.stderr}`);
+  }
+  const historyCountAfterIntent = JSON.parse(historyAfterIntent.stdout.trim()).length;
+  assert.equal(
+    historyCountAfterIntent,
+    historyCountBeforeIntent,
+    "intent-draft must not create actions"
+  );
+
+  const assistNoProvider = runAgentctl(
+    ["intent-draft", "unrelated phrase", "--agent", FAKE_AGENT_ID, "--assist", "--json"],
+    { env }
+  );
+  if (assistNoProvider.status !== 0) {
+    fail(
+      `intent-draft --assist exited ${assistNoProvider.status}\nstdout: ${assistNoProvider.stdout}\nstderr: ${assistNoProvider.stderr}`
+    );
+  }
+  const assistResult = JSON.parse(assistNoProvider.stdout.trim());
+  assert.equal(assistResult.outcome, "needs_clarification");
+  assert.equal(assistResult.assist_notice?.code, "assisted_unavailable");
+  assert.equal(
+    JSON.parse(runAgentctl(["history", "--json"], { env }).stdout.trim()).length,
+    historyCountBeforeIntent,
+    "intent-draft --assist must not create actions"
+  );
+
   console.log("agentctl smoke passed");
 } finally {
   rmSync(tmpDir, { recursive: true, force: true });

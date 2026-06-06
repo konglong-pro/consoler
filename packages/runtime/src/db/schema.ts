@@ -103,6 +103,20 @@ CREATE TABLE IF NOT EXISTS interactions (
   timeout_outcome TEXT,
   UNIQUE(run_id, interaction_id)
 );
+
+CREATE TABLE IF NOT EXISTS artifact_retrievals (
+  retrieval_id TEXT PRIMARY KEY,
+  action_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  artifact_uri TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  error_code TEXT,
+  error_message TEXT,
+  requested_at TEXT NOT NULL,
+  completed_at TEXT
+);
 `;
 
 export const INTERACTIONS_MIGRATION_SQL = `

@@ -11,10 +11,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/app.js";
 import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 
-const WAIT_OPTS = { timeout: 10_000, interval: 50 } as const;
+const WAIT_OPTS = { timeout: 15_000, interval: 50 } as const;
 
 async function flushStdin(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 200 : 120));
+}
+
+async function selectHistoryFromHome(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined
+): Promise<void> {
+  void lastFrame;
+  stdin.write("2");
+  await flushStdin();
+}
+
+async function openFirstHistoryEntry(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined
+): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    stdin.write("\r");
+    await flushStdin();
+    if ((lastFrame() ?? "").includes("Trace")) {
+      return;
+    }
+  }
 }
 
 describe("TUI history and trace flow", () => {
@@ -51,8 +73,7 @@ describe("TUI history and trace flow", () => {
       WAIT_OPTS
     );
 
-    stdin.write("2");
-    await flushStdin();
+    await selectHistoryFromHome(stdin, lastFrame);
 
     await vi.waitFor(
       () => {
@@ -80,8 +101,7 @@ describe("TUI history and trace flow", () => {
       WAIT_OPTS
     );
 
-    stdin.write("1");
-    await flushStdin();
+    await openFirstHistoryEntry(stdin, lastFrame);
 
     await vi.waitFor(
       () => {

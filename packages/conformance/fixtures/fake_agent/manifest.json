@@ -3,6 +3,10 @@
   "name": "Conformance Fake Agent",
   "version": "0.0.1",
   "protocol_version": "0",
+  "artifact_retrieval": {
+    "uri_schemes": ["fake"],
+    "kinds": ["conformance.fixture"]
+  },
   "commands": [
     {
       "name": "conformance.static_echo",
@@ -22,6 +26,26 @@
         "invalidates_on_context_change": false
       },
       "side_effects": [],
+      "permissions": []
+    },
+    {
+      "name": "conformance.read_only_text",
+      "description": "Read-only command that returns no diff or artifact blocks.",
+      "args_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string", "minLength": 1 }
+        }
+      },
+      "preview_policy": {
+        "preview_kind": "static",
+        "requires_approval_before_preview": false,
+        "preview_side_effects": [],
+        "invalidates_on_context_change": false
+      },
+      "side_effects": ["read_fixture_state"],
       "permissions": []
     },
     {

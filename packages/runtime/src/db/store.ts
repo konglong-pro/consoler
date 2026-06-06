@@ -49,6 +49,20 @@ export interface StoredInteraction {
   redacted_paths_json: string | null;
 }
 
+export interface StoredArtifactRetrieval {
+  retrieval_id: string;
+  action_id: string;
+  agent_id: string;
+  block_id: string;
+  artifact_uri: string;
+  kind: string;
+  status: string;
+  error_code: string | null;
+  error_message: string | null;
+  requested_at: string;
+  completed_at: string | null;
+}
+
 export interface StoredEvent {
   id: number;
   event_id: string | null;
@@ -522,7 +536,14 @@ export class ConsolerStore {
     };
   }
 
-  listRecentActions(limit: number, command?: string): Array<{
+  listRecentActions(
+    limit: number,
+    filter: {
+      command?: string;
+      agentId?: string;
+      commands?: string[];
+    } = {}
+  ): Array<{
     action_id: string;
     agent_id: string;
     command: string;
@@ -533,9 +554,20 @@ export class ConsolerStore {
   }> {
     const clauses: string[] = [];
     const params: Record<string, unknown> = { limit };
-    if (command) {
+    if (filter.command) {
       clauses.push("a.command = @command");
-      params.command = command;
+      params.command = filter.command;
+    }
+    if (filter.agentId) {
+      clauses.push("a.agent_id = @agentId");
+      params.agentId = filter.agentId;
+    }
+    if (filter.commands?.length) {
+      const placeholders = filter.commands.map((_, index) => `@cmd${index}`);
+      clauses.push(`a.command IN (${placeholders.join(", ")})`);
+      filter.commands.forEach((command, index) => {
+        params[`cmd${index}`] = command;
+      });
     }
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     return this.db
@@ -706,4 +738,40 @@ export class ConsolerStore {
       .get(actionId) as { count: number } | undefined;
     return row?.count ?? 0;
   }
+
+  insertArtifactRetrieval(record: StoredArtifactRetrieval): void {
+    this.db
+      .prepare(
+        `INSERT INTO artifact_retrievals (
+          retrieval_id, action_id, agent_id, block_id, artifact_uri, kind,
+          status, error_code, error_message, requested_at, completed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        record.retrieval_id,
+        record.action_id,
+        record.agent_id,
+        record.block_id,
+        record.artifact_uri,
+        record.kind,
+        record.status,
+        record.error_code,
+        record.error_message,
+        record.requested_at,
+        record.completed_at
+      );
+  }
+
+  listArtifactRetrievalsForAction(actionId: string): StoredArtifactRetrieval[] {
+    return this.db
+      .prepare(
+        `SELECT retrieval_id, action_id, agent_id, block_id, artifact_uri, kind,
+                status, error_code, error_message, requested_at, completed_at
+         FROM artifact_retrievals
+         WHERE action_id = ?
+         ORDER BY requested_at ASC, retrieval_id ASC`
+      )
+      .all(actionId) as StoredArtifactRetrieval[];
+  }
+
 }

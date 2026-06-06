@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from consoler_agent_sdk import (
+    SUPPORTED_PROTOCOL_VERSION,
     AgentCancelled,
     AgentError,
     CancelFlag,
@@ -13,10 +14,13 @@ from consoler_agent_sdk import (
     InteractionHelper,
     JsonRpcServer,
     StepHelper,
+    __version__,
     artifact_block,
     diff_block,
+    markdown_block,
     normalize_error,
 )
+import consoler_agent_sdk
 from consoler_agent_sdk.adapter import AgentAdapter
 
 
@@ -51,6 +55,13 @@ class EchoAdapter(AgentAdapter):
 
 
 MANIFEST = Path(__file__).parent / "manifest.json"
+
+
+def test_sdk_version_and_public_exports():
+    assert __version__ == "0.1.0"
+    assert SUPPORTED_PROTOCOL_VERSION == "0"
+    for name in consoler_agent_sdk.__all__:
+        assert hasattr(consoler_agent_sdk, name)
 
 
 @pytest.fixture
@@ -314,6 +325,48 @@ def test_interaction_timeout_skip_and_continue_results():
     helper._pending_id = "ix_continue"
     result = helper.respond("ix_continue", {"timed_out": True, "action": "continue"})
     assert result == {"ok": True}
+
+
+def test_get_artifact_view_default_unsupported():
+    adapter = EchoAdapter()
+    with pytest.raises(AgentError) as exc:
+        adapter.get_artifact_view(
+            artifact_uri="fake://x",
+            kind="text/plain",
+            block_id="b1",
+            action_id="act_1",
+        )
+    assert exc.value.code == "artifact_retrieval.unsupported"
+
+
+class ArtifactAdapter(EchoAdapter):
+    def get_artifact_view(self, **kwargs) -> dict:
+        return {
+            "artifact_uri": kwargs["artifact_uri"],
+            "kind": kwargs["kind"],
+            "blocks": [markdown_block("# View", title="view")],
+        }
+
+
+def test_jsonrpc_get_artifact_view_dispatch():
+    adapter = ArtifactAdapter()
+    server = JsonRpcServer(adapter)
+    response = server._dispatch(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "agent.get_artifact_view",
+            "params": {
+                "artifact_uri": "fake://artifacts/x",
+                "kind": "conformance.fixture",
+                "block_id": "b1",
+                "action_id": "act_1",
+            },
+        }
+    )
+    assert response is not None
+    assert response["result"]["artifact_uri"] == "fake://artifacts/x"
+    assert response["result"]["blocks"][0]["type"] == "markdown"
 
 
 def test_jsonrpc_discover_dispatch(monkeypatch):

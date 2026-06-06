@@ -12,18 +12,38 @@ import type {
   RenderableBlock
 } from "@consoler/protocol";
 import type { AgentCommand, ApprovalToken } from "@consoler/protocol";
-import type { ActionHistoryEntry, ActionTrace } from "@consoler/runtime";
+import type {
+  ActionHistoryEntry,
+  ActionTrace,
+  FetchArtifactViewResult
+} from "@consoler/runtime";
 import {
   ConsolerRuntime,
+  draftIntent,
+  draftIntentAssisted,
   requiresPreviewApproval,
+  type IntentDraftAssistedResult,
   type PreparedAction,
   type PreparedExecutionControl,
   type RuntimeEventHandlers,
   type RuntimeTerminalResult
 } from "@consoler/runtime";
 
+import { ArtifactViewPanel } from "./artifact-view-panel.js";
+import { artifactBlocksFromList } from "./artifact-utils.js";
 import { historyItemDetail, historyItemLabel } from "./history-label.js";
+import { ResultBlocksPanel } from "./result-blocks-panel.js";
 import { TracePanel } from "./trace-panel.js";
+import {
+  actionProductLabel,
+  fieldDisplayHelp,
+  fieldDisplayLabel,
+  historyListOptions
+} from "./variant-display.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
+import { resolveProductAssistedIntent, type ProductAssistedIntentConfig } from "./assisted-intent.js";
+import { buildIntentScopeFromVariant } from "./intent-scope.js";
+import { assertVariantManifestOrExit } from "./variant-validation.js";
 
 import { blocksFromEvents, EventLine, RenderableBlockView } from "./blocks.js";
 import {
@@ -41,7 +61,7 @@ import {
   type FormField
 } from "./schema-form.js";
 
-const AGENT_ID = "indbase";
+const DEV_SHELL_AGENT_ID = "indbase";
 
 type Phase =
   | "boot"
@@ -54,13 +74,71 @@ type Phase =
   | "prepared"
   | "running"
   | "finished"
+  | "artifact_view"
   | "replay";
 type TabId = "logs" | "events" | "json" | "replay";
+type ArtifactOpenSource = "trace" | "finished";
 
 const TABS: TabId[] = ["logs", "events", "json", "replay"];
 
+type HomeFocus = "nl" | "tasks";
+
+function joinNotices(...parts: Array<string | null | undefined>): string | undefined {
+  const messages = parts.filter((part): part is string => Boolean(part));
+  return messages.length > 0 ? messages.join(" ") : undefined;
+}
+
+function mergePrefilledFormValues(
+  formFields: FormField[],
+  prefilledArgs?: Record<string, unknown>,
+  sessionPrefillValues?: Record<string, unknown>
+): Record<string, unknown> {
+  const defaults = defaultFormValues(formFields);
+  const allowed = new Set(formFields.map((field) => field.name));
+  const merged = { ...defaults };
+  if (sessionPrefillValues) {
+    for (const [key, value] of Object.entries(sessionPrefillValues)) {
+      if (allowed.has(key) && isSessionPrefillValue(value)) {
+        merged[key] = value;
+      }
+    }
+  }
+  if (!prefilledArgs) {
+    return merged;
+  }
+  for (const [key, value] of Object.entries(prefilledArgs)) {
+    if (allowed.has(key)) {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+function isSessionPrefillValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.trim() !== "";
+  }
+  return value !== null && value !== undefined;
+}
+
+function collectSessionPrefillValues(
+  args: Record<string, unknown>,
+  fieldNames: string[]
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const fieldName of fieldNames) {
+    const value = args[fieldName];
+    if (isSessionPrefillValue(value)) {
+      values[fieldName] = value;
+    }
+  }
+  return values;
+}
+
 export interface AppProps {
   replayActionId?: string;
+  /** Product Console Variant; omit for generic dev shell. */
+  variant?: ConsoleVariantConfig;
   /** Injected runtime (tests) */
   runtime?: ConsolerRuntime;
   /** Skip agent discover and open home with this manifest (tests) */
@@ -71,18 +149,33 @@ export interface AppProps {
   testPrepared?: PreparedAction;
   /** Test-only: open directly on history list (requires injected runtime + seeded store) */
   testHistoryView?: boolean;
+  /** Test-only: product assisted intent config (overrides process env) */
+  assistedIntent?: ProductAssistedIntentConfig;
 }
 
 export function App({
   replayActionId,
+  variant,
   runtime: runtimeProp,
   initialManifest,
   testTraceView,
   testPrepared,
-  testHistoryView
+  testHistoryView,
+  assistedIntent: assistedIntentProp
 }: AppProps) {
   const { exit } = useApp();
   const runtime = useMemo(() => runtimeProp ?? new ConsolerRuntime(), [runtimeProp]);
+  const productMode = Boolean(variant);
+  const agentId = variant?.defaultAgentId ?? DEV_SHELL_AGENT_ID;
+  const assistedIntent = useMemo((): ProductAssistedIntentConfig => {
+    if (!productMode) {
+      return { enabled: false, provider: null };
+    }
+    if (assistedIntentProp !== undefined) {
+      return assistedIntentProp;
+    }
+    return resolveProductAssistedIntent(process.env);
+  }, [productMode, assistedIntentProp]);
 
   const [phase, setPhase] = useState<Phase>(replayActionId ? "replay" : "boot");
   const [tab, setTab] = useState<TabId>("events");
@@ -111,7 +204,22 @@ export function App({
   const [interactionValues, setInteractionValues] = useState<Record<string, unknown>>({});
   const [interactionFocusedField, setInteractionFocusedField] = useState(0);
   const [focusedField, setFocusedField] = useState(0);
+  const [nlText, setNlText] = useState("");
+  const [homeFocus, setHomeFocus] = useState<HomeFocus>("nl");
+  const [homeNotice, setHomeNotice] = useState<string | null>(null);
+  const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [sessionPrefillValues, setSessionPrefillValues] = useState<Record<string, unknown>>({});
+  const [nlDraftingBusy, setNlDraftingBusy] = useState(false);
+  const [artifactSource, setArtifactSource] = useState<ArtifactOpenSource | null>(null);
+  const [selectedArtifactIndex, setSelectedArtifactIndex] = useState(0);
+  const [artifactViewState, setArtifactViewState] = useState<{
+    actionId: string;
+    blockId: string;
+    result: FetchArtifactViewResult | null;
+    loading: boolean;
+  } | null>(null);
   const formValuesRef = useRef<Record<string, unknown>>({});
+  const nlTextRef = useRef("");
   const submitFlushRef = useRef(false);
   const executionControlRef = useRef<PreparedExecutionControl | null>(null);
   const cancelRequestedRef = useRef(false);
@@ -138,6 +246,50 @@ export function App({
 
   const logEvents = useMemo(() => events.filter((e) => e.type === "log"), [events]);
 
+  const artifactBlocks = useMemo(() => {
+    if (phase === "trace" && trace) {
+      return artifactBlocksFromList(trace.result_blocks);
+    }
+    if (phase === "finished") {
+      return artifactBlocksFromList(blocks);
+    }
+    return [];
+  }, [phase, trace, blocks]);
+
+  const selectedArtifactBlockId =
+    artifactBlocks[selectedArtifactIndex]?.block_id ?? null;
+
+  const openArtifact = useCallback(
+    async (actionId: string, blockId: string, source: ArtifactOpenSource) => {
+      setArtifactSource(source);
+      setPhase("artifact_view");
+      setArtifactViewState({ actionId, blockId, result: null, loading: true });
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await runtime.fetchArtifactView(actionId, blockId);
+        setArtifactViewState({ actionId, blockId, result, loading: false });
+        if (source === "trace") {
+          setTrace(runtime.getActionTrace(actionId));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setArtifactViewState({
+          actionId,
+          blockId,
+          result: {
+            ok: false,
+            error: { code: "agent_error", message: String(err) }
+          },
+          loading: false
+        });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [runtime]
+  );
+
   useEffect(() => {
     formValuesRef.current = formValues;
   }, [formValues]);
@@ -145,6 +297,7 @@ export function App({
   useEffect(() => {
     if (testTraceView) {
       setTrace(testTraceView.trace);
+      setSelectedArtifactIndex(0);
       setPhase("trace");
       if (testTraceView.tab) setTab(testTraceView.tab);
       if (initialManifest) setManifest(initialManifest);
@@ -165,11 +318,14 @@ export function App({
     }
     if (testHistoryView) {
       if (initialManifest) setManifest(initialManifest);
-      setHistoryEntries(runtime.listActionHistory({ limit: 20 }));
+      setHistoryEntries(runtime.listActionHistory(historyListOptions(variant)));
       setPhase("history");
       return;
     }
     if (initialManifest) {
+      if (variant) {
+        assertVariantManifestOrExit(variant, initialManifest);
+      }
       setManifest(initialManifest);
       setPhase("home");
       return;
@@ -186,7 +342,12 @@ export function App({
   const bootstrap = async () => {
     try {
       setBusy(true);
-      const m = await runtime.discover(AGENT_ID);
+      const m = await runtime.discover(agentId);
+      if (variant) {
+        assertVariantManifestOrExit(variant, m);
+        const allowed = new Set(variant.allowedCommands);
+        m.commands = m.commands.filter((command) => allowed.has(command.name));
+      }
       setManifest(m);
       setPhase("home");
     } catch (err) {
@@ -196,7 +357,10 @@ export function App({
     }
   };
 
-  const selectCommand = (commandName: string) => {
+  const selectCommand = (
+    commandName: string,
+    options?: { prefilledArgs?: Record<string, unknown>; formNotice?: string }
+  ) => {
     if (!manifest) return;
     const command = manifest.commands.find((c) => c.name === commandName);
     if (!command) {
@@ -204,11 +368,16 @@ export function App({
       return;
     }
     const formFields = fieldsFromCommand(command);
-    const defaults = defaultFormValues(formFields);
+    const merged = mergePrefilledFormValues(
+      formFields,
+      options?.prefilledArgs,
+      sessionPrefillValues
+    );
     setSelectedCommand(commandName);
     setFields(formFields);
-    formValuesRef.current = defaults;
-    setFormValues(defaults);
+    formValuesRef.current = merged;
+    setFormValues(merged);
+    setFormNotice(options?.formNotice ?? null);
     setPreviewApproval(null);
     setProbePreview(null);
     setPrepared(null);
@@ -219,9 +388,107 @@ export function App({
     setPhase("form");
   };
 
+  const selectProductAction = (actionId: string) => {
+    if (!variant) return;
+    const action = variant.actions.find((entry) => entry.id === actionId);
+    if (!action) {
+      setError(`Unknown task: ${actionId}`);
+      return;
+    }
+    setHomeNotice(null);
+    selectCommand(action.command);
+  };
+
+  const nlSubmitInFlightRef = useRef(false);
+  const lastNlSubmitAtRef = useRef(0);
+
+  const submitNaturalLanguage = useCallback(
+    async (rawText?: string) => {
+      const now = Date.now();
+      if (now - lastNlSubmitAtRef.current < 300) return;
+      lastNlSubmitAtRef.current = now;
+      if (!variant || !manifest || nlDraftingBusy || nlSubmitInFlightRef.current) return;
+      nlSubmitInFlightRef.current = true;
+      try {
+        const text = (rawText ?? nlTextRef.current).trim();
+        if (!text) {
+          setHomeNotice("Enter a request or press Tab to choose a task.");
+          return;
+        }
+
+        const applyIntentDraftResult = (
+          result: IntentDraftAssistedResult,
+          options: { assistedAttempted?: boolean } = {}
+        ) => {
+          const assistMessage = result.assist_notice?.message;
+          const assistedSuccessMessage =
+            options.assistedAttempted && !result.message && !assistMessage
+              ? "Assisted drafting was used."
+              : undefined;
+          if (result.outcome === "candidate") {
+            setNlText("");
+            nlTextRef.current = "";
+            setHomeNotice(null);
+            const candidateNotice = joinNotices(
+              result.message,
+              assistMessage,
+              assistedSuccessMessage
+            );
+            selectCommand(result.candidate.command, {
+              prefilledArgs: result.candidate.prefilled_args,
+              ...(candidateNotice ? { formNotice: candidateNotice } : {})
+            });
+            return;
+          }
+          if (result.reason === "missing_required_args" && result.partial_candidate) {
+            setNlText("");
+            nlTextRef.current = "";
+            setHomeNotice(null);
+            const partialNotice = joinNotices(result.message, assistMessage);
+            selectCommand(result.partial_candidate.command, {
+              prefilledArgs: result.partial_candidate.prefilled_args,
+              ...(partialNotice ? { formNotice: partialNotice } : {})
+            });
+            return;
+          }
+          setHomeNotice(joinNotices(result.message, assistMessage) ?? result.message);
+          setHomeFocus("tasks");
+        };
+
+        const scope = buildIntentScopeFromVariant(manifest, variant);
+        if (!assistedIntent.enabled) {
+          applyIntentDraftResult(draftIntent({ text, scope }));
+          return;
+        }
+
+        const deterministic = draftIntent({ text, scope });
+        if (deterministic.outcome === "candidate") {
+          applyIntentDraftResult(deterministic);
+          return;
+        }
+
+        setNlDraftingBusy(true);
+        setHomeNotice(null);
+        try {
+          const result = await draftIntentAssisted({
+            text,
+            scope,
+            provider: assistedIntent.provider
+          });
+          applyIntentDraftResult(result, { assistedAttempted: true });
+        } finally {
+          setNlDraftingBusy(false);
+        }
+      } finally {
+        nlSubmitInFlightRef.current = false;
+      }
+    },
+    [assistedIntent, manifest, nlDraftingBusy, variant]
+  );
+
   const loadHistory = () => {
     try {
-      setHistoryEntries(runtime.listActionHistory({ limit: 20 }));
+      setHistoryEntries(runtime.listActionHistory(historyListOptions(variant)));
       setPhase("history");
       setError(null);
     } catch (err) {
@@ -233,6 +500,7 @@ export function App({
     try {
       const payload = runtime.getActionTrace(actionId);
       setTrace(payload);
+      setSelectedArtifactIndex(0);
       setPhase("trace");
       setError(null);
     } catch (err) {
@@ -266,7 +534,7 @@ export function App({
       setError(null);
       setBusy(true);
       try {
-        const input = { agentId: AGENT_ID, command: selectedCommand, args };
+        const input = { agentId, command: selectedCommand, args };
         const commandDef = manifest?.commands.find((c) => c.name === selectedCommand);
         if (commandDef && requiresPreviewApproval(commandDef)) {
           const gate = await runtime.preview(input, { approvePreview: false });
@@ -292,7 +560,16 @@ export function App({
         setBusy(false);
       }
     },
-    [closeExecutionControl, fields, manifest, probePreview, resetExecutionSession, runtime, selectedCommand]
+    [
+      agentId,
+      closeExecutionControl,
+      fields,
+      manifest,
+      probePreview,
+      resetExecutionSession,
+      runtime,
+      selectedCommand
+    ]
   );
 
   const approveProbePreview = async () => {
@@ -301,7 +578,7 @@ export function App({
     setBusy(true);
     try {
       const input = {
-        agentId: AGENT_ID,
+        agentId,
         command: selectedCommand,
         args: formValuesRef.current
       };
@@ -379,9 +656,20 @@ export function App({
       setExecutionOutcome(terminal.state);
       if (terminal.state === "succeeded") {
         setBlocks(blocksFromEvents(terminal.events));
+        const memoryFields = variant?.sessionPrefillFields ?? [];
+        if (memoryFields.length > 0) {
+          const nextSessionValues = collectSessionPrefillValues(
+            prepared.action.args,
+            memoryFields
+          );
+          if (Object.keys(nextSessionValues).length > 0) {
+            setSessionPrefillValues((prev) => ({ ...prev, ...nextSessionValues }));
+          }
+        }
       } else {
         setBlocks([]);
       }
+      setSelectedArtifactIndex(0);
       setPhase("finished");
       clearPendingInteraction();
     } catch (err) {
@@ -456,6 +744,20 @@ export function App({
       exit();
       return;
     }
+    if (phase === "home" && productMode && key.tab && !key.shift && !key.ctrl) {
+      setHomeFocus((current) => (current === "nl" ? "tasks" : "nl"));
+      return;
+    }
+    if (
+      phase === "home" &&
+      productMode &&
+      homeFocus === "nl" &&
+      key.return &&
+      !nlDraftingBusy
+    ) {
+      void submitNaturalLanguage();
+      return;
+    }
     if (
       phase === "running" &&
       pendingInteraction?.choices?.length &&
@@ -512,6 +814,32 @@ export function App({
         return;
       }
     }
+    if (
+      (phase === "trace" || phase === "finished") &&
+      artifactBlocks.length > 0 &&
+      !busy
+    ) {
+      if (key.upArrow) {
+        setSelectedArtifactIndex(
+          (current) => (current - 1 + artifactBlocks.length) % artifactBlocks.length
+        );
+        return;
+      }
+      if (key.downArrow) {
+        setSelectedArtifactIndex((current) => (current + 1) % artifactBlocks.length);
+        return;
+      }
+      if (key.return && selectedArtifactBlockId) {
+        const actionId =
+          phase === "trace" ? trace!.action.action_id : prepared!.action.action_id;
+        void openArtifact(
+          actionId,
+          selectedArtifactBlockId,
+          phase === "trace" ? "trace" : "finished"
+        );
+        return;
+      }
+    }
     if (key.tab && key.ctrl) {
       const idx = TABS.indexOf(tab);
       setTab(TABS[(idx + 1) % TABS.length]!);
@@ -519,6 +847,12 @@ export function App({
     }
     if (key.escape) {
       setError(null);
+      if (phase === "artifact_view") {
+        setArtifactViewState(null);
+        setPhase(artifactSource === "finished" ? "finished" : "trace");
+        setArtifactSource(null);
+        return;
+      }
       if (phase === "trace") {
         setTrace(null);
         setPhase("history");
@@ -529,7 +863,22 @@ export function App({
         setPhase("home");
         return;
       }
+      if (phase === "finished") {
+        setSelectedCommand(null);
+        setPreviewApproval(null);
+        setProbePreview(null);
+        setPrepared(null);
+        resetExecutionSession();
+        setEvents([]);
+        setBlocks([]);
+        setSelectedArtifactIndex(0);
+        setHomeFocus("tasks");
+        setPhase("home");
+        return;
+      }
       if (phase === "command_select" || phase === "form") {
+        setFormNotice(null);
+        setHomeFocus("nl");
         setPhase("home");
         return;
       }
@@ -597,16 +946,26 @@ export function App({
   return (
     <Box flexDirection="column" padding={1}>
       <Text bold color="green">
-        consoler TUI —{" "}
+        {productMode ? variant!.productName : "consoler TUI"} -{" "}
         {phase === "home"
-          ? "home"
+          ? productMode
+            ? "tasks"
+            : "home"
           : phase === "history"
             ? "history"
             : phase === "trace"
               ? "trace"
-              : selectedCommand ?? "select command"}
+              : phase === "artifact_view"
+                ? "artifact"
+                : actionProductLabel(variant, selectedCommand) ??
+                  selectedCommand ??
+                  (productMode ? "task" : "select command")}
       </Text>
-      {busy ? (
+      {nlDraftingBusy ? (
+        <Text color="yellow">
+          <Spinner type="dots" /> Drafting request...
+        </Text>
+      ) : busy ? (
         <Text color="yellow">
           <Spinner type="dots" /> Working...
         </Text>
@@ -618,17 +977,71 @@ export function App({
 
         {phase === "home" ? (
           <Box flexDirection="column">
-            <Text bold>Start</Text>
-            <SelectInput
-              items={[
-                { label: "New Action", value: "new" },
-                { label: "History", value: "history" }
-              ]}
-              onSelect={(item) => {
-                if (item.value === "history") loadHistory();
-                else setPhase("command_select");
-              }}
-            />
+            <Text bold>{productMode ? "What would you like to do?" : "Start"}</Text>
+            {productMode && variant ? (
+              <Box flexDirection="column" marginTop={1}>
+                <Text>Describe your request (Tab to choose a task)</Text>
+                {homeNotice ? <Text color="yellow">{homeNotice}</Text> : null}
+                <TextInput
+                  value={nlText}
+                  focus={homeFocus === "nl" && !nlDraftingBusy}
+                  onChange={(value) => {
+                    if (nlDraftingBusy) return;
+                    nlTextRef.current = value;
+                    setNlText(value);
+                  }}
+                  onSubmit={(value) => {
+                    if (nlDraftingBusy) return;
+                    nlTextRef.current = value;
+                    scheduleAfterInputFlush(() => {
+                      void submitNaturalLanguage(value);
+                    });
+                  }}
+                />
+                <Box flexDirection="column" marginTop={1}>
+                  <Text bold={homeFocus === "tasks"} dimColor={homeFocus === "nl"}>
+                    Tasks
+                  </Text>
+                  {homeFocus === "nl" ? (
+                    <Box flexDirection="column">
+                      {variant.actions.map((action) => (
+                        <Text key={action.id} dimColor>
+                          {action.label}
+                        </Text>
+                      ))}
+                      <Text dimColor>History</Text>
+                    </Box>
+                  ) : (
+                    <SelectInput
+                      items={[
+                        ...variant.actions.map((action) => ({
+                          label: action.label,
+                          value: `action:${action.id}`
+                        })),
+                        { label: "History", value: "history" }
+                      ]}
+                      onSelect={(item) => {
+                        if (item.value === "history") loadHistory();
+                        else if (item.value.startsWith("action:")) {
+                          selectProductAction(item.value.slice("action:".length));
+                        }
+                      }}
+                    />
+                  )}
+                </Box>
+              </Box>
+            ) : (
+              <SelectInput
+                items={[
+                  { label: "New Action", value: "new" },
+                  { label: "History", value: "history" }
+                ]}
+                onSelect={(item) => {
+                  if (item.value === "history") loadHistory();
+                  else setPhase("command_select");
+                }}
+              />
+            )}
           </Box>
         ) : null}
 
@@ -640,7 +1053,7 @@ export function App({
             ) : (
               <SelectInput
                 items={historyEntries.map((entry) => ({
-                  label: `${historyItemLabel(entry)}  ${historyItemDetail(entry)}`,
+                  label: `${historyItemLabel(entry, variant)}  ${historyItemDetail(entry)}`,
                   value: entry.action_id
                 }))}
                 onSelect={(item) => openTrace(item.value)}
@@ -651,11 +1064,34 @@ export function App({
 
         {phase === "trace" && trace ? (
           <Box flexDirection="column">
-            <TracePanel trace={trace} />
+            <TracePanel
+              trace={trace}
+              selectedArtifactBlockId={selectedArtifactBlockId}
+              productMode={productMode}
+              {...(variant ? { variant } : {})}
+            />
           </Box>
         ) : null}
 
-        {phase === "command_select" && manifest ? (
+        {phase === "artifact_view" && artifactViewState ? (
+          <Box flexDirection="column">
+            {artifactViewState.loading ? (
+              <Text color="yellow">Fetching artifact view...</Text>
+            ) : artifactViewState.result ? (
+              <ArtifactViewPanel
+                actionId={artifactViewState.actionId}
+                blockId={artifactViewState.blockId}
+                result={artifactViewState.result}
+                productMode={productMode}
+                {...(variant ? { variant } : {})}
+              />
+            ) : (
+              <Text color="red">No artifact view result</Text>
+            )}
+          </Box>
+        ) : null}
+
+        {phase === "command_select" && manifest && !productMode ? (
           <Box flexDirection="column">
             <Text bold>Select command (Esc home)</Text>
             <SelectInput
@@ -670,29 +1106,50 @@ export function App({
 
         {phase === "form" ? (
           <Box flexDirection="column">
-            <Text bold>Action form (Tab/↑↓ move field, Enter continue)</Text>
-            <Text dimColor>
-              Field {focusedField + 1}/{fields.length}: {fields[focusedField]?.name}
+            <Text bold>
+              {productMode
+                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} - details`
+                : "Action form (Tab/Up/Down move field, Enter continue)"}
             </Text>
-            {fields.map((field, index) => (
-              <FormFieldRow
-                key={field.name}
-                field={field}
-                value={formValues[field.name]}
-                active={focusedField === index}
-                onChange={(v) => updateField(field.name, v)}
-                onSubmitValue={(v) => scheduleSubmitForm({ name: field.name, value: v })}
-              />
-            ))}
+            {formNotice ? <Text color="yellow">{formNotice}</Text> : null}
+            {!productMode ? (
+              <Text dimColor>
+                Field {focusedField + 1}/{fields.length}: {fields[focusedField]?.name}
+              </Text>
+            ) : null}
+            {fields.map((field, index) => {
+              const help = fieldDisplayHelp(variant, selectedCommand, field.name);
+              return (
+                <FormFieldRow
+                  key={field.name}
+                  field={field}
+                  value={formValues[field.name]}
+                  active={focusedField === index}
+                  displayLabel={fieldDisplayLabel(variant, selectedCommand, field.name)}
+                  {...(help ? { displayHelp: help } : {})}
+                  onChange={(v) => updateField(field.name, v)}
+                  onSubmitValue={(v) => scheduleSubmitForm({ name: field.name, value: v })}
+                />
+              );
+            })}
           </Box>
         ) : null}
 
-        {phase === "preview_approval" && previewApproval ? (
+        {phase === "preview_approval" && previewApproval && selectedCommand ? (
           <Box flexDirection="column">
-            <Text bold>Preview approval (y=probe, n=cancel)</Text>
-            <Text>approval_id: {previewApproval.approval_id}</Text>
+            <Text bold>
+              {productMode
+                ? (variant?.approvalCopy[selectedCommand]?.previewTitle ?? "Preview approval")
+                : "Preview approval (y=probe, n=cancel)"}
+            </Text>
+            {!productMode ? <Text>approval_id: {previewApproval.approval_id}</Text> : null}
             <Text dimColor>{previewApproval.material.plan_summary}</Text>
             <Text dimColor>Side effects: {previewApproval.material.side_effects.join(", ")}</Text>
+            {productMode ? (
+              <Text dimColor>
+                {variant?.approvalCopy[selectedCommand]?.previewPrompt ?? "y = continue, n = cancel"}
+              </Text>
+            ) : null}
           </Box>
         ) : null}
 
@@ -705,8 +1162,12 @@ export function App({
 
         {prepared && (phase === "prepared" || phase === "running" || phase === "finished") ? (
           <Box flexDirection="column">
-            <Text bold>Action draft</Text>
-            <Text>action_id: {prepared.action.action_id}</Text>
+            <Text bold>
+              {productMode
+                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} - ready`
+                : "Action draft"}
+            </Text>
+            {!productMode ? <Text>action_id: {prepared.action.action_id}</Text> : null}
             <Box marginTop={1}>
               <Text bold>Plan</Text>
             </Box>
@@ -722,10 +1183,21 @@ export function App({
               </Box>
             ) : null}
             <Box marginTop={1}>
-              <Text bold>Execution approval (y=execute, n=cancel)</Text>
+              <Text bold>
+                {productMode
+                  ? (variant?.approvalCopy[selectedCommand ?? ""]?.executeTitle ??
+                    "Execution approval")
+                  : "Execution approval (y=execute, n=cancel)"}
+              </Text>
             </Box>
-            <Text>approval_id: {prepared.approval.approval_id}</Text>
+            {!productMode ? <Text>approval_id: {prepared.approval.approval_id}</Text> : null}
             <Text dimColor>{prepared.approval.material.plan_summary}</Text>
+            {productMode ? (
+              <Text dimColor>
+                {variant?.approvalCopy[selectedCommand ?? ""]?.executePrompt ??
+                  "y = start, n = cancel"}
+              </Text>
+            ) : null}
           </Box>
         ) : null}
 
@@ -744,7 +1216,7 @@ export function App({
             <Text dimColor>{pendingInteraction.message}</Text>
             {pendingInteraction.timeout_policy ? (
               <Text dimColor>
-                Timeout: {pendingInteraction.timeout_policy.timeout_seconds}s →{" "}
+                Timeout: {pendingInteraction.timeout_policy.timeout_seconds}s{" -> "}
                 {pendingInteraction.timeout_policy.on_timeout}
               </Text>
             ) : null}
@@ -776,7 +1248,7 @@ export function App({
               </Box>
             ) : null}
             {interactionBusy ? (
-              <Text color="yellow">Sending interaction response…</Text>
+              <Text color="yellow">Sending interaction response...</Text>
             ) : null}
           </Box>
         ) : null}
@@ -793,15 +1265,30 @@ export function App({
             {events.map((event) => (
               <EventLine key={event.event_id} event={event} />
             ))}
-            {blocks.map((block, index) => (
-              <RenderableBlockView key={`${block.block_id}-${index}`} block={block} />
-            ))}
+            {phase === "finished" ? (
+              <ResultBlocksPanel
+                blocks={blocks}
+                title={productMode ? "Results" : "Result blocks"}
+                selectedArtifactBlockId={selectedArtifactBlockId}
+                productMode={productMode}
+                {...(variant ? { variant } : {})}
+              />
+            ) : (
+              blocks.map((block, index) => (
+                <RenderableBlockView
+                  key={`${block.block_id}-${index}`}
+                  block={block}
+                  productMode={productMode}
+                  {...(variant ? { variant } : {})}
+                />
+              ))
+            )}
           </Box>
         ) : null}
 
         {phase === "replay" ? (
           <Box flexDirection="column">
-            <Text bold>Replay — action_id (Enter to load)</Text>
+            <Text bold>Replay - action_id (Enter to load)</Text>
             <TextInput
               value={replayInput}
               onChange={setReplayInput}
@@ -819,7 +1306,7 @@ export function App({
 
       <Box flexDirection="column" borderStyle="single" marginTop={1} padding={1}>
         <Text>
-          Tab: {TABS.join(" | ")} — active: <Text bold>{tab}</Text>
+          Tab: {TABS.join(" | ")} - active: <Text bold>{tab}</Text>
         </Text>
         {tab === "logs" ? (
           <Box flexDirection="column">
@@ -839,7 +1326,7 @@ export function App({
         {tab === "json" ? <Text>{jsonPayload}</Text> : null}
         {tab === "replay" && phase !== "replay" ? (
           <Box flexDirection="column">
-            <Text dimColor>Replay tab — enter action_id:</Text>
+            <Text dimColor>Replay tab - enter action_id:</Text>
             <TextInput value={replayInput} onChange={setReplayInput} onSubmit={loadReplay} />
           </Box>
         ) : null}
@@ -848,22 +1335,32 @@ export function App({
       <Box marginTop={1}>
         <Text dimColor>
           {phase === "home"
-            ? "Enter select | Esc —"
+            ? productMode
+              ? "NL: Enter submit | Tab tasks | Enter select task"
+              : "Enter select"
             : phase === "history"
               ? "Enter trace | Esc home"
               : phase === "trace"
-                ? "r replay | Esc history | Ctrl+Tab JSON"
-                : phase === "form"
-                  ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
+                ? `r replay | Esc history | Ctrl+Tab JSON${
+                    artifactBlocks.length ? " | Up/Down artifact | Enter open" : ""
+                  }`
+                : phase === "artifact_view"
+                  ? "Esc back"
+                : phase === "finished" && artifactBlocks.length
+                    ? "Up/Down artifact | Enter open | Esc home | Ctrl+Tab JSON"
+                  : phase === "finished"
+                    ? "Esc home | Ctrl+Tab JSON"
+                  : phase === "form"
+                  ? "Tab/Up/Down field | Enter submit | Ctrl+Tab bottom tabs"
                   : phase === "running"
                     ? pendingInteraction?.choices?.length
                       ? interactionBusy
-                        ? "Sending interaction response…"
+                        ? "Sending interaction response..."
                         : "1-n choose | c cancel"
                       : pendingInteraction?.prompt_schema
                         ? interactionBusy
-                          ? "Sending interaction response…"
-                          : "Tab/↑↓ field | Enter submit | c cancel"
+                          ? "Sending interaction response..."
+                          : "Tab/Up/Down field | Enter submit | c cancel"
                         : cancelRequested
                           ? "Cancel requested; waiting for agent checkpoint"
                           : "c cancel"
@@ -881,16 +1378,22 @@ function FormFieldRow({
   field,
   value,
   active,
+  displayLabel,
+  displayHelp,
   onChange,
   onSubmitValue
 }: {
   field: FormField;
   value: unknown;
   active: boolean;
+  displayLabel?: string;
+  displayHelp?: string;
   onChange: (value: unknown) => void;
   onSubmitValue?: (value: string) => void;
 }) {
-  const label = `${field.name}${field.required ? " *" : ""}${field.description ? ` — ${field.description}` : ""}`;
+  const nameForLabel = displayLabel ?? field.name;
+  const help = displayHelp ?? field.description;
+  const label = `${nameForLabel}${field.required ? " *" : ""}${help ? ` - ${help}` : ""}`;
 
   if (field.kind === "number") {
     return (

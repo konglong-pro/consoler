@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "prestart": "pnpm --filter @consoler/protocol build && pnpm --filter @consoler/runtime build",
     "start": "tsx src/main.tsx",
+    "start:indbase": "tsx src/main.tsx -- --variant indbase",
     "test": "vitest run",
     "typecheck": "pnpm --filter @consoler/runtime build && tsc -p tsconfig.json --noEmit"
   },

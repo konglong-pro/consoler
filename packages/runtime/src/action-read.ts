@@ -7,6 +7,7 @@ import type {
   ActionHistoryStatus,
   ActionRunSummary,
   ActionTrace,
+  ArtifactRetrievalTraceRecord,
   InteractionTraceRecord,
   ListActionHistoryOptions,
   RejectedEventRecord,
@@ -113,6 +114,22 @@ function toInteractionTraceRecord(row: StoredInteraction): InteractionTraceRecor
   };
 }
 
+function toArtifactRetrievalTraceRecord(
+  row: import("./db/store.js").StoredArtifactRetrieval
+): ArtifactRetrievalTraceRecord {
+  return {
+    retrieval_id: row.retrieval_id,
+    block_id: row.block_id,
+    artifact_uri: row.artifact_uri,
+    kind: row.kind,
+    status: row.status as ArtifactRetrievalTraceRecord["status"],
+    error_code: row.error_code,
+    error_message: row.error_message,
+    requested_at: row.requested_at,
+    completed_at: row.completed_at
+  };
+}
+
 function toRejectedRecord(row: StoredEvent): RejectedEventRecord {
   return {
     id: row.id,
@@ -132,10 +149,21 @@ export function listActionHistory(
   options: ListActionHistoryOptions = {}
 ): ActionHistoryEntry[] {
   const limit = options.limit ?? DEFAULT_HISTORY_LIMIT;
-  const rows = store.listRecentActions(limit * 4, options.command);
+  const recentFilter: {
+    command?: string;
+    agentId?: string;
+    commands?: string[];
+  } = {};
+  if (options.command) recentFilter.command = options.command;
+  if (options.agentId) recentFilter.agentId = options.agentId;
+  if (options.commands?.length) recentFilter.commands = options.commands;
+  const rows = store.listRecentActions(limit * 4, recentFilter);
   const entries: ActionHistoryEntry[] = [];
 
   for (const row of rows) {
+    if (options.agentId && row.agent_id !== options.agentId) continue;
+    if (options.commands?.length && !options.commands.includes(row.command)) continue;
+
     const args = JSON.parse(row.args_json) as Record<string, unknown>;
     const status = deriveActionStatus(row.latest_run_id, row.latest_run_status);
     if (options.status && status !== options.status) continue;
@@ -224,6 +252,9 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
     terminal_state,
     latest_run_id: timeline.run_id,
     latest_run_control_error,
-    interactions: store.listInteractionsForAction(actionId).map(toInteractionTraceRecord)
+    interactions: store.listInteractionsForAction(actionId).map(toInteractionTraceRecord),
+    artifact_retrievals: store
+      .listArtifactRetrievalsForAction(actionId)
+      .map(toArtifactRetrievalTraceRecord)
   };
 }

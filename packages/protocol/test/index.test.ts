@@ -8,6 +8,7 @@ import {
   manifestHasDuplicateCommands,
   validateActionEvent,
   validateCommandArgs,
+  validateArtifactView,
   validateManifest,
   validateRenderableBlock
 } from "../src/index.js";
@@ -36,6 +37,41 @@ describe("manifest validation", () => {
   it("rejects missing required manifest fields", () => {
     const invalid = { agent_id: "indbase" };
     const result = validateManifest(invalid);
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts manifests without artifact_retrieval", () => {
+    expect(validateManifest(indbaseManifestFixture).ok).toBe(true);
+    expect(validateManifest(indbaseManifestV1aFixture).ok).toBe(true);
+    expect(validateManifest(indbaseManifestFixture).value?.artifact_retrieval).toBeUndefined();
+  });
+
+  it("accepts a valid artifact_retrieval capability", () => {
+    const withCapability = {
+      ...indbaseManifestFixture,
+      artifact_retrieval: {
+        uri_schemes: ["indbase"],
+        kinds: ["text/markdown", "application/json"]
+      }
+    };
+    const result = validateManifest(withCapability);
+    expect(result.ok).toBe(true);
+    expect(result.value?.artifact_retrieval?.uri_schemes).toEqual(["indbase"]);
+  });
+
+  it.each([
+    ["missing uri_schemes", { kinds: ["text/plain"] }],
+    ["missing kinds", { uri_schemes: ["indbase"] }],
+    ["empty uri_schemes", { uri_schemes: [], kinds: ["text/plain"] }],
+    ["empty kinds", { uri_schemes: ["indbase"], kinds: [] }],
+    ["non-string uri_schemes item", { uri_schemes: [1], kinds: ["text/plain"] }],
+    ["non-string kinds item", { uri_schemes: ["indbase"], kinds: [false] }],
+    ["unknown field", { uri_schemes: ["indbase"], kinds: ["text/plain"], extra: true }]
+  ])("rejects malformed artifact_retrieval: %s", (_label, capability) => {
+    const result = validateManifest({
+      ...indbaseManifestFixture,
+      artifact_retrieval: capability
+    });
     expect(result.ok).toBe(false);
   });
 });
@@ -219,5 +255,69 @@ describe("renderable block validation", () => {
       content: {}
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("artifact view validation", () => {
+  const baseView = {
+    artifact_uri: "indbase://documents/doc_1",
+    kind: "text/markdown",
+    blocks: [] as Array<{ block_id: string; type: string; content: unknown }>
+  };
+
+  it("accepts markdown, table, json, error, and diff blocks", () => {
+    const view = {
+      ...baseView,
+      blocks: [
+        { block_id: "b-md", type: "markdown", content: "# Title" },
+        {
+          block_id: "b-table",
+          type: "table",
+          content: { columns: ["a"], rows: [["1"]] }
+        },
+        { block_id: "b-json", type: "json", content: { ok: true } },
+        {
+          block_id: "b-error",
+          type: "error",
+          content: { code: "E1", message: "failed" }
+        },
+        {
+          block_id: "b-diff",
+          type: "diff",
+          content: { unified_diff: "--- a\n+++ b\n" }
+        }
+      ]
+    };
+    expect(validateArtifactView(view).ok).toBe(true);
+  });
+
+  it("rejects nested artifact blocks", () => {
+    const result = validateArtifactView({
+      ...baseView,
+      blocks: [
+        {
+          block_id: "b-art",
+          type: "artifact",
+          content: { uri: "indbase://documents/doc_1", kind: "text/markdown" }
+        }
+      ]
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it.each([
+    ["missing artifact_uri", { kind: "text/plain", blocks: [] }],
+    ["missing kind", { artifact_uri: "indbase://x", blocks: [] }],
+    ["missing blocks", { artifact_uri: "indbase://x", kind: "text/plain" }],
+    [
+      "malformed block",
+      {
+        artifact_uri: "indbase://x",
+        kind: "text/plain",
+        blocks: [{ block_id: "b1", type: "diff", content: {} }]
+      }
+    ]
+  ])("rejects invalid artifact view: %s", (_label, view) => {
+    expect(validateArtifactView(view).ok).toBe(false);
   });
 });

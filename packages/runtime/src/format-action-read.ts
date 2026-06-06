@@ -130,6 +130,20 @@ export function formatActionTrace(trace: ActionTrace): string {
   }
   lines.push("");
 
+  if (trace.artifact_retrievals.length) {
+    lines.push(`Artifact retrievals (${trace.artifact_retrievals.length}):`);
+    for (const retrieval of trace.artifact_retrievals) {
+      lines.push(
+        `  ${retrieval.retrieval_id} block=${retrieval.block_id} status=${retrieval.status} uri=${retrieval.artifact_uri} kind=${retrieval.kind}`
+      );
+      if (retrieval.error_code) {
+        lines.push(`    error=${retrieval.error_code}: ${retrieval.error_message ?? ""}`);
+      }
+      lines.push(`    requested_at=${retrieval.requested_at} completed_at=${retrieval.completed_at ?? "-"}`);
+    }
+    lines.push("");
+  }
+
   if (trace.result_blocks.length) {
     lines.push(`Result blocks (${trace.result_blocks.length}):`);
     for (const block of trace.result_blocks) {
