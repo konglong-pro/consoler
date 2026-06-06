@@ -65,7 +65,51 @@ git diff --check
   -> passed with LF/CRLF warnings only
 ```
 
-`E:\indbase\tests\test_v0323d_indbase_intent_coordination.py` was not present in the local worktree during this validation, so that optional coordination check was not run.
+Latest GitHub PR validation: 2026-06-06.
+
+```text
+PR: https://github.com/konglong-pro/consoler/pull/4
+Head: feat/v2-artifact-retrieval
+Base: feat/v1k-v1l-on-main
+Merge state: CLEAN
+
+CI / typecheck and test
+  -> passed
+CI / windows focused
+  -> passed
+```
+
+Merge strategy note: PR #4 is currently a stacked PR on `feat/v1k-v1l-on-main`, not a direct PR to the repository default branch. Keep that stack unless the branch series is intentionally flattened; merge the base branch first, then PR #4.
+
+Indbase coordination validation now exists and passed in `E:\indbase`:
+
+```text
+uv run python -m pytest tests/test_v0323c_indbase_coordination.py tests/test_v0323d_indbase_intent_coordination.py -q
+  -> 5 passed
+```
+
+## Dogfood Evidence
+
+Manual/product dogfood is tracked separately from the automated V4e gate. Latest local dogfood: 2026-06-06.
+
+Commands run:
+
+```text
+CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke
+  -> real indbase smoke passed
+
+CONSOLER_ROOT=<kept smoke root> INDBASE_SMOKE_VAULT=<disposable vault> MANUAL_TUI_ACTION_ID=<ingest action>
+pnpm exec vitest run packages/tui/test/real-indbase-product-tui-smoke.test.tsx
+  -> 1 test passed
+```
+
+Coverage:
+
+- Real disposable vault: `doctor`, `search_sources`, `ingest_file`, duplicate skip/continue interaction, trace, replay, and artifact-view retrieval passed through the real `indbase` agent.
+- Product TUI path: opened the indbase product home, selected `Check knowledge base status`, filled the vault field, approved execution, observed success, opened variant-scoped history/trace, opened an artifact view, and returned to trace.
+- NL/form behavior remains covered by focused TUI tests and the V4e gate: NL submit opens editable forms with missing-required notices and does not execute actions by itself.
+
+Operator note: the Codex shell used for this closeout is not an interactive terminal PTY, so the product TUI dogfood was run through the checked-in Ink smoke test rather than a manually typed `pnpm tui:indbase --` session. The smoke uses the same `App` and `indbaseVariant` path with a real discovered `indbase` manifest and runtime store.
 
 ## Out of Scope
 
