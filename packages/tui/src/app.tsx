@@ -927,7 +927,7 @@ export function App({
   return (
     <Box flexDirection="column" padding={1}>
       <Text bold color="green">
-        {productMode ? variant!.productName : "consoler TUI"} —{" "}
+        {productMode ? variant!.productName : "consoler TUI"} -{" "}
         {phase === "home"
           ? productMode
             ? "tasks"
@@ -1057,7 +1057,7 @@ export function App({
         {phase === "artifact_view" && artifactViewState ? (
           <Box flexDirection="column">
             {artifactViewState.loading ? (
-              <Text color="yellow">Fetching artifact view…</Text>
+              <Text color="yellow">Fetching artifact view...</Text>
             ) : artifactViewState.result ? (
               <ArtifactViewPanel
                 actionId={artifactViewState.actionId}
@@ -1089,8 +1089,8 @@ export function App({
           <Box flexDirection="column">
             <Text bold>
               {productMode
-                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} — details`
-                : "Action form (Tab/↑↓ move field, Enter continue)"}
+                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} - details`
+                : "Action form (Tab/Up/Down move field, Enter continue)"}
             </Text>
             {formNotice ? <Text color="yellow">{formNotice}</Text> : null}
             {!productMode ? (
@@ -1145,7 +1145,7 @@ export function App({
           <Box flexDirection="column">
             <Text bold>
               {productMode
-                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} — ready`
+                ? `${actionProductLabel(variant, selectedCommand) ?? "Task"} - ready`
                 : "Action draft"}
             </Text>
             {!productMode ? <Text>action_id: {prepared.action.action_id}</Text> : null}
@@ -1197,7 +1197,7 @@ export function App({
             <Text dimColor>{pendingInteraction.message}</Text>
             {pendingInteraction.timeout_policy ? (
               <Text dimColor>
-                Timeout: {pendingInteraction.timeout_policy.timeout_seconds}s →{" "}
+                Timeout: {pendingInteraction.timeout_policy.timeout_seconds}s{" -> "}
                 {pendingInteraction.timeout_policy.on_timeout}
               </Text>
             ) : null}
@@ -1229,7 +1229,7 @@ export function App({
               </Box>
             ) : null}
             {interactionBusy ? (
-              <Text color="yellow">Sending interaction response…</Text>
+              <Text color="yellow">Sending interaction response...</Text>
             ) : null}
           </Box>
         ) : null}
@@ -1269,7 +1269,7 @@ export function App({
 
         {phase === "replay" ? (
           <Box flexDirection="column">
-            <Text bold>Replay — action_id (Enter to load)</Text>
+            <Text bold>Replay - action_id (Enter to load)</Text>
             <TextInput
               value={replayInput}
               onChange={setReplayInput}
@@ -1287,7 +1287,7 @@ export function App({
 
       <Box flexDirection="column" borderStyle="single" marginTop={1} padding={1}>
         <Text>
-          Tab: {TABS.join(" | ")} — active: <Text bold>{tab}</Text>
+          Tab: {TABS.join(" | ")} - active: <Text bold>{tab}</Text>
         </Text>
         {tab === "logs" ? (
           <Box flexDirection="column">
@@ -1307,7 +1307,7 @@ export function App({
         {tab === "json" ? <Text>{jsonPayload}</Text> : null}
         {tab === "replay" && phase !== "replay" ? (
           <Box flexDirection="column">
-            <Text dimColor>Replay tab — enter action_id:</Text>
+            <Text dimColor>Replay tab - enter action_id:</Text>
             <TextInput value={replayInput} onChange={setReplayInput} onSubmit={loadReplay} />
           </Box>
         ) : null}
@@ -1317,31 +1317,31 @@ export function App({
         <Text dimColor>
           {phase === "home"
             ? productMode
-              ? "NL: Enter submit | Tab tasks | Enter select task | Esc —"
-              : "Enter select | Esc —"
+              ? "NL: Enter submit | Tab tasks | Enter select task"
+              : "Enter select"
             : phase === "history"
               ? "Enter trace | Esc home"
               : phase === "trace"
                 ? `r replay | Esc history | Ctrl+Tab JSON${
-                    artifactBlocks.length ? " | ↑↓ Enter artifact" : ""
+                    artifactBlocks.length ? " | Up/Down artifact | Enter open" : ""
                   }`
                 : phase === "artifact_view"
                   ? "Esc back"
                 : phase === "finished" && artifactBlocks.length
-                    ? "↑↓ artifact | Enter open | Esc home | Ctrl+Tab JSON"
+                    ? "Up/Down artifact | Enter open | Esc home | Ctrl+Tab JSON"
                   : phase === "finished"
                     ? "Esc home | Ctrl+Tab JSON"
                   : phase === "form"
-                  ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
+                  ? "Tab/Up/Down field | Enter submit | Ctrl+Tab bottom tabs"
                   : phase === "running"
                     ? pendingInteraction?.choices?.length
                       ? interactionBusy
-                        ? "Sending interaction response…"
+                        ? "Sending interaction response..."
                         : "1-n choose | c cancel"
                       : pendingInteraction?.prompt_schema
                         ? interactionBusy
-                          ? "Sending interaction response…"
-                          : "Tab/↑↓ field | Enter submit | c cancel"
+                          ? "Sending interaction response..."
+                          : "Tab/Up/Down field | Enter submit | c cancel"
                         : cancelRequested
                           ? "Cancel requested; waiting for agent checkpoint"
                           : "c cancel"
@@ -1374,7 +1374,7 @@ function FormFieldRow({
 }) {
   const nameForLabel = displayLabel ?? field.name;
   const help = displayHelp ?? field.description;
-  const label = `${nameForLabel}${field.required ? " *" : ""}${help ? ` — ${help}` : ""}`;
+  const label = `${nameForLabel}${field.required ? " *" : ""}${help ? ` - ${help}` : ""}`;
 
   if (field.kind === "number") {
     return (

@@ -27,7 +27,7 @@ export function ResultBlocksPanel({
   return (
     <Box marginTop={1} flexDirection="column">
       <Text bold>{title}</Text>
-      {hasArtifact ? <Text dimColor>↑↓ select artifact | Enter open</Text> : null}
+      {hasArtifact ? <Text dimColor>Up/Down select artifact | Enter open</Text> : null}
       {blocks.map((block, index) => (
         <RenderableBlockView
           key={`${block.block_id}-${index}`}

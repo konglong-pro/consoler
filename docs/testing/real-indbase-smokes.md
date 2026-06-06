@@ -43,9 +43,21 @@ The script removes the temp directory unless `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1
 
 Latest V4d local evidence on 2026-06-06: `pnpm test:real-indbase-smoke` passed after the v4d dogfood UX gate, runtime tests, typecheck, and build. The optional `indbase.document_revision` artifact kind was skipped by design when no such artifact was emitted.
 
+Latest V4f local evidence on 2026-06-06: `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke` passed, and `pnpm exec vitest run packages/tui/test/real-indbase-product-tui-smoke.test.tsx` passed against the kept disposable smoke root. The product TUI smoke now covers doctor execution, variant-scoped trace/artifact open/back, and deterministic NL search form prefill with an explicit disposable vault path.
+
 ## Manual TUI Smoke
 
-After `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke`, use the printed `CONSOLER_ROOT`, `MANUAL_TUI_ACTION_ID`, or `SOURCE_TRUST_ACTION_ID` with `pnpm tui:indbase --` (product entry; variant-scoped history), then History → Trace → artifact block → Enter → Esc. The dev shell `pnpm tui --` remains for protocol-oriented command selection. Full steps are in `docs/testing/v2-artifact-retrieval-closeout.md`.
+After `CONSOLER_KEEP_REAL_INDBASE_SMOKE=1 pnpm test:real-indbase-smoke`, use the printed `CONSOLER_ROOT`, `MANUAL_TUI_ACTION_ID`, or `SOURCE_TRUST_ACTION_ID` with `pnpm tui:indbase --` (product entry; variant-scoped history), then History -> Trace -> artifact block -> Enter -> Esc. The dev shell `pnpm tui --` remains for protocol-oriented command selection.
+
+The local-only `packages/tui/test/real-indbase-product-tui-smoke.test.tsx` smoke also opens the product TUI with the real discovered indbase manifest and verifies:
+
+- doctor can run through the product task path
+- session `vault_path` is remembered for a later form
+- deterministic NL opens an editable search form instead of executing
+- history/trace stays variant-scoped
+- an artifact view opens from trace and returns with Esc
+
+Full manual steps are in `docs/testing/v2-artifact-retrieval-closeout.md` and `docs/testing/v4f-indbase-real-dogfood-friction-pass.md`.
 
 ## Boundary
 

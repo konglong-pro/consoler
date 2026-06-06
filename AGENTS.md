@@ -32,6 +32,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - V3 closeout evidence: `docs/testing/v3-closeout.md`
 - V4d indbase dogfood UX gate: `pnpm test:v4d-indbase-dogfood-ux`
 - V4e indbase variant intent drafting gate: `pnpm test:v4e-indbase-variant-intent-drafting`
+- V4f indbase real dogfood friction pass gate: `pnpm test:v4f-indbase-real-dogfood-friction-pass`
 - Artifact retrieval smoke: `pnpm test:artifact-retrieval-smoke`
 - Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
@@ -104,6 +105,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Indbase Probe Stabilization: start in `docs/planning/v4c-indbase-probe-stabilization.md`; clean up real-agent smoke/conformance signals without protocol/runtime schema changes, and coordinate source-trust fixture work through `E:\indbase\docs\planning\v0.3.2.3a-consoler-probe-stabilization.md`.
 - Indbase Dogfood UX Variant: start in `docs/planning/v4d-indbase-dogfood-ux.md`; improve `pnpm tui:indbase --` for the Source Trust Loop through variant configuration and focused TUI tests, coordinating boundaries through `E:\indbase\docs\planning\v0.3.2.3c-consoler-variant-dogfood-ux.md`.
 - Indbase Variant Intent Drafting: start in `docs/planning/v4e-indbase-variant-intent-drafting.md`; add deterministic indbase-variant Source Trust Loop form prefill without protocol/runtime store changes, default LLM/assisted behavior, or `E:\indbase` implementation changes.
+- Indbase Real Dogfood Friction Pass: start in `docs/planning/v4f-indbase-real-dogfood-friction-pass.md`; use real Source Trust Loop dogfood evidence to fix narrow existing-surface TUI friction without protocol/runtime store changes, new indbase commands, or `E:\indbase` core implementation changes.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -394,6 +396,14 @@ Prefer narrow validation for the changed package before broad checks.
   5. Keep session `vault_path` as TUI form-layer convenience only; runtime `draftIntent` must not infer from session state, cwd, history, filesystem, trace, artifacts, or previous results.
   6. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/tui test`, the V4e gate once implemented, `pnpm test:v3b-intent-gate`, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run V3c assisted gates only if shared assisted paths are touched.
 
+- Indbase Real Dogfood Friction Pass:
+  1. Read `CONTEXT.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, `docs/planning/v4d-indbase-dogfood-ux.md`, `docs/testing/v4d-indbase-dogfood-ux-closeout.md`, `docs/planning/v4e-indbase-variant-intent-drafting.md`, `docs/testing/v4e-indbase-variant-intent-drafting.md`, `docs/testing/real-indbase-smokes.md`, `docs/planning/v4f-indbase-real-dogfood-friction-pass.md`, and `E:\indbase\docs\planning\v0.3.2.3e-source-trust-real-dogfood-friction-pass.md`.
+  2. Touch only `packages/tui/src/variants/indbase.ts`, `packages/tui/src/app.tsx`, variant display/artifact/form helpers, focused TUI tests, real-indbase smoke tests, gate scripts, and docs unless a focused friction finding proves an adjacent TUI helper bug.
+  3. Do not edit protocol schemas, runtime lifecycle/store/replay semantics, Python SDK packaging, new indbase commands, or `E:\indbase` implementation files unless real dogfood proves a narrow adapter defect.
+  4. Require every code change to map to a friction register item with evidence, impact, owner, status, and verification.
+  5. Keep real/private vault evidence local-only and redacted; do not commit private paths, source text, trace JSON, runtime SQLite files, logs, screenshots with private content, temp vaults, or local path secrets.
+  6. Run `pnpm --filter @consoler/tui test`, the V4f gate once implemented, `pnpm test:v4e-indbase-variant-intent-drafting`, `pnpm test:v4d-indbase-dogfood-ux`, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run `pnpm test:real-indbase-smoke` and manual `pnpm tui:indbase --` only as local-only evidence or with explicit skip reasons.
+
 ## Architecture Constraints
 
 - `consoler` never imports agent business logic. Agents are always out-of-process.
@@ -495,6 +505,8 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/testing/v4d-indbase-dogfood-ux-closeout.md`: V4d validation evidence, frozen surface, and boundary check.
 - `docs/planning/v4e-indbase-variant-intent-drafting.md`: deterministic indbase variant Source Trust Loop intent drafting execution brief.
 - `docs/testing/v4e-indbase-variant-intent-drafting.md`: V4e gate coverage, boundaries, and closeout checklist.
+- `docs/planning/v4f-indbase-real-dogfood-friction-pass.md`: evidence-first real Source Trust Loop dogfood friction pass execution brief.
+- `docs/testing/v4f-indbase-real-dogfood-friction-pass.md`: V4f friction register, gate coverage, local-only dogfood evidence, and boundary check.
 
 ## Done Means
 

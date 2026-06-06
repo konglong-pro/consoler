@@ -23,6 +23,7 @@
     "test:v3c-tui-assisted-intent-gate": "node scripts/test-v3c-tui-assisted-intent-gate.mjs",
     "test:v4d-indbase-dogfood-ux": "node scripts/test-v4d-indbase-dogfood-ux.mjs",
     "test:v4e-indbase-variant-intent-drafting": "node scripts/test-v4e-indbase-variant-intent-drafting.mjs",
+    "test:v4f-indbase-real-dogfood-friction-pass": "node scripts/test-v4f-indbase-real-dogfood-friction-pass.mjs",
     "test:artifact-retrieval-smoke": "node scripts/test-artifact-retrieval-smoke.mjs",
     "test:real-indbase-smoke": "node scripts/test-real-indbase-smoke.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",

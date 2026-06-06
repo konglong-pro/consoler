@@ -19,12 +19,12 @@ export function TracePanel({
 }) {
   return (
     <Box flexDirection="column">
-      <Text bold>Trace — {trace.action.command}</Text>
+      <Text bold>Trace - {trace.action.command}</Text>
       <Text>action_id: {trace.action.action_id}</Text>
       <Text dimColor>status: {trace.terminal_state ?? "prepared"}</Text>
       {trace.latest_run_control_error ? (
         <Text color="red">
-          control_error: {trace.latest_run_control_error.code} — {trace.latest_run_control_error.message}
+          control_error: {trace.latest_run_control_error.code} - {trace.latest_run_control_error.message}
         </Text>
       ) : null}
 
@@ -65,7 +65,7 @@ export function TracePanel({
           <Text bold>Runs</Text>
           {trace.runs.map((run) => (
             <Text key={run.run_id}>
-              {run.run_id} — {run.status}
+              {run.run_id} - {run.status}
             </Text>
           ))}
         </Box>
@@ -77,13 +77,13 @@ export function TracePanel({
           {trace.interactions.map((interaction) => (
             <Box key={`${interaction.run_id}-${interaction.interaction_id}`} flexDirection="column" marginBottom={1}>
               <Text>
-                {interaction.interaction_id} — {interaction.status}
+                {interaction.interaction_id} - {interaction.status}
               </Text>
               <Text dimColor>{interaction.request.title}</Text>
               <Text>{interaction.request.message}</Text>
               {interaction.request.timeout_policy ? (
                 <Text dimColor>
-                  timeout: {interaction.request.timeout_policy.timeout_seconds}s →{" "}
+                  timeout: {interaction.request.timeout_policy.timeout_seconds}s{" -> "}
                   {interaction.request.timeout_policy.on_timeout}
                 </Text>
               ) : null}
@@ -118,7 +118,7 @@ export function TracePanel({
         ) : (
           trace.rejected_events.map((rejected) => (
             <Text key={rejected.id}>
-              [{rejected.seq ?? "?"}] {rejected.type} — {rejected.reject_reason ?? "unknown"}
+              [{rejected.seq ?? "?"}] {rejected.type} - {rejected.reject_reason ?? "unknown"}
             </Text>
           ))
         )}
@@ -129,7 +129,7 @@ export function TracePanel({
           <Text bold>Artifact retrievals ({trace.artifact_retrievals.length})</Text>
           {trace.artifact_retrievals.map((retrieval) => (
             <Text key={retrieval.retrieval_id}>
-              {retrieval.block_id} — {retrieval.status}
+              {retrieval.block_id} - {retrieval.status}
               {retrieval.error_code ? ` (${retrieval.error_code})` : ""}
             </Text>
           ))}

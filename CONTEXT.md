@@ -30,6 +30,10 @@ A deterministic, indbase-variant-scoped natural-language drafting slice that map
 
 Indbase Variant Intent Drafting may combine a runtime `prefilled_args` result with session-local Variant Vault Context only in the TUI form layer. The runtime mapper does not infer missing `vault_path` from session state, history, cwd, or the filesystem.
 
+## Source Trust Real Dogfood Friction Pass
+
+An evidence-first closeout phase for the indbase Console Variant where real local Source Trust Loop use identifies and fixes concrete TUI friction in the existing surface. It may refine consoler-owned variant UX, tests, and docs, and may make narrow indbase adapter fixes only when real dogfood proves a contract defect. It is not a new feature phase, protocol/runtime/store/schema change, Web UI, vault browser, generated-answer flow, review/category/tag mutation, or expansion of the Source Trust Loop action surface.
+
 ## Single-Source Trust Walkthrough
 
 The primary indbase dogfood path in the TUI: operate one vault and one source through health check, ingest or prepared fixture state, governed search, document artifact inspection, review/task/error inspection, and traceability before broader browsing or automation is added.

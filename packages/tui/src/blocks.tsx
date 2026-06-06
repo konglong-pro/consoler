@@ -79,7 +79,7 @@ export function RenderableBlockView({
       to_label?: string;
       language?: string;
     };
-    const header = [diff.from_label, diff.to_label].filter(Boolean).join(" → ");
+    const header = [diff.from_label, diff.to_label].filter(Boolean).join(" -> ");
     const lines = (diff.unified_diff ?? "").split("\n");
     return (
       <Box flexDirection="column" marginBottom={1}>

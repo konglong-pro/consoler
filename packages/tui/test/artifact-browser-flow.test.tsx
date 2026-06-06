@@ -162,6 +162,7 @@ describe("TUI artifact browser flow", () => {
         const frame = lastFrame() ?? "";
         expect(frame).toContain("Knowledge base document");
         expect(frame).toContain("Trusted source note");
+        expect(frame).toContain("Up/Down select artifact | Enter open");
         expect(frame).toContain("Enter");
       },
       WAIT_OPTS
@@ -279,7 +280,7 @@ describe("TUI artifact browser flow", () => {
     await vi.waitFor(
       () => {
         const frame = lastFrame() ?? "";
-        expect(frame).toContain("Trace —");
+        expect(frame).toContain("Trace -");
         expect(frame).not.toContain("Artifact view");
       },
       WAIT_OPTS

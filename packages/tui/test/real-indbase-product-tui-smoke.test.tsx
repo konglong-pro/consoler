@@ -51,6 +51,22 @@ async function selectDoctorTaskFromHome(
   await flushStdin();
 }
 
+async function typeNlAndSubmit(
+  stdin: { write: (value: string) => void },
+  lastFrame: () => string | undefined,
+  text: string
+): Promise<void> {
+  await flushStdin();
+  for (const char of text) {
+    stdin.write(char);
+    await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 5 : 1));
+  }
+  await vi.waitFor(() => expect(lastFrame() ?? "").toContain(text), WAIT_OPTS);
+  await flushStdin();
+  stdin.write("\r");
+  await flushStdin();
+}
+
 const describeReal = smokeRoot && vaultPath ? describe : describe.skip;
 
 describeReal("real indbase product TUI manual path", () => {
@@ -173,6 +189,37 @@ describeReal("real indbase product TUI manual path", () => {
     );
 
     traceUnmount();
+
+    const { lastFrame: nlFrame, stdin: nlStdin, unmount: nlUnmount } = render(
+      <App variant={indbaseVariant} runtime={runtime} initialManifest={manifest} />
+    );
+
+    await vi.waitFor(
+      () => {
+        const frame = nlFrame() ?? "";
+        expect(frame).toContain("Describe your request");
+        expect(frame).toContain("Search trusted sources");
+      },
+      WAIT_OPTS
+    );
+
+    await typeNlAndSubmit(nlStdin, nlFrame, `search "source trust" ${vaultPath!}`);
+
+    await vi.waitFor(
+      () => {
+        const frame = nlFrame() ?? "";
+        expect(frame).toContain("Search trusted sources");
+        expect(frame).toContain("Vault location");
+        expect(frame).toContain(vaultPath!);
+        expect(frame).toContain("Search text");
+        expect(frame).toContain("source trust");
+        expect(frame).not.toContain("action_id");
+        expect(frame).not.toContain("approval_id");
+      },
+      WAIT_OPTS
+    );
+
+    nlUnmount();
     },
     180_000
   );
