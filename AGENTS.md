@@ -33,6 +33,7 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - V4d indbase dogfood UX gate: `pnpm test:v4d-indbase-dogfood-ux`
 - V4e indbase variant intent drafting gate: `pnpm test:v4e-indbase-variant-intent-drafting`
 - V4f indbase real dogfood friction pass gate: `pnpm test:v4f-indbase-real-dogfood-friction-pass`
+- V4g indbase NL v2 intent drafting gate: `pnpm test:v4g-indbase-nl-v2-intent-drafting`
 - Artifact retrieval smoke: `pnpm test:artifact-retrieval-smoke`
 - Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
@@ -106,6 +107,7 @@ Prefer narrow validation for the changed package before broad checks.
 - Indbase Dogfood UX Variant: start in `docs/planning/v4d-indbase-dogfood-ux.md`; improve `pnpm tui:indbase --` for the Source Trust Loop through variant configuration and focused TUI tests, coordinating boundaries through `E:\indbase\docs\planning\v0.3.2.3c-consoler-variant-dogfood-ux.md`.
 - Indbase Variant Intent Drafting: start in `docs/planning/v4e-indbase-variant-intent-drafting.md`; add deterministic indbase-variant Source Trust Loop form prefill without protocol/runtime store changes, default LLM/assisted behavior, or `E:\indbase` implementation changes.
 - Indbase Real Dogfood Friction Pass: start in `docs/planning/v4f-indbase-real-dogfood-friction-pass.md`; use real Source Trust Loop dogfood evidence to fix narrow existing-surface TUI friction without protocol/runtime store changes, new indbase commands, or `E:\indbase` core implementation changes.
+- Indbase NL v2 Intent Drafting: start in `docs/planning/v4g-indbase-nl-v2-intent-drafting.md` and `docs/adr/0007-indbase-nl-v2-intent-drafting.md`; add explicit opt-in assisted drafting for the indbase variant with provider context audit, strict suggestion validation, fake-provider gates, no default assisted behavior, no protocol/runtime store changes, and no `E:\indbase` implementation changes.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -404,6 +406,14 @@ Prefer narrow validation for the changed package before broad checks.
   5. Keep real/private vault evidence local-only and redacted; do not commit private paths, source text, trace JSON, runtime SQLite files, logs, screenshots with private content, temp vaults, or local path secrets.
   6. Run `pnpm --filter @consoler/tui test`, the V4f gate once implemented, `pnpm test:v4e-indbase-variant-intent-drafting`, `pnpm test:v4d-indbase-dogfood-ux`, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run `pnpm test:real-indbase-smoke` and manual `pnpm tui:indbase --` only as local-only evidence or with explicit skip reasons.
 
+- Indbase NL v2 Intent Drafting:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/adr/0004-llm-assisted-intent-drafting.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, `docs/adr/0007-indbase-nl-v2-intent-drafting.md`, `docs/planning/v3c-assisted-intent-runtime-cli.md`, `docs/planning/v3c-assisted-intent-tui-entry.md`, `docs/planning/v4e-indbase-variant-intent-drafting.md`, `docs/planning/v4f-indbase-real-dogfood-friction-pass.md`, and `docs/planning/v4g-indbase-nl-v2-intent-drafting.md`.
+  2. Touch only `packages/runtime/src/intent-draft-assisted*.ts`, provider config/helpers, focused runtime tests, `packages/agentctl/src/intent-draft*.ts`, focused agentctl tests, `packages/tui/src/assisted-intent.ts`, `packages/tui/src/app.tsx`, `packages/tui/src/intent-scope.ts`, `packages/tui/src/variants/indbase.ts`, focused TUI tests, gate scripts, CI, and docs unless a focused test proves an adjacent helper bug.
+  3. Do not edit protocol schemas, runtime lifecycle/store/replay semantics, transport, Python SDK packaging, new indbase commands, or `E:\indbase` implementation files unless V4g proves a narrow adapter defect.
+  4. Keep assisted drafting explicit opt-in, deterministic-first, fake-provider testable, single-action, and form-prefill only; do not prepare, preview, approve, execute, persist raw NL/provider data, or create history/trace from NL submit.
+  5. Audit provider context and forbid session vault context, history, trace, artifacts, previous results, vault contents, source snippets, file contents, cwd, runtime roots, and provider internals from provider requests.
+  6. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test`, `pnpm --filter @consoler/tui test`, `pnpm test:v3c-assisted-intent-gate`, `pnpm test:v3c-tui-assisted-intent-gate`, `pnpm test:v4e-indbase-variant-intent-drafting`, `pnpm test:v4f-indbase-real-dogfood-friction-pass`, the V4g gate once implemented, `pnpm typecheck`, `pnpm build`, and `git diff --check`; real provider smoke stays local-only and optional.
+
 ## Architecture Constraints
 
 - `consoler` never imports agent business logic. Agents are always out-of-process.
@@ -416,6 +426,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `draftIntent({ text, scope })` is a pure runtime helper; product hints flow through `IntentScope`, while `ConsoleVariantConfig` stays outside runtime/protocol.
 - LLM-assisted Intent Drafting is opt-in and deterministic-first: provider suggestions must be validated into the existing reviewable Intent Drafting result shape, and private provider configuration must not be committed or leaked.
 - Product TUI assisted drafting requires explicit local opt-in and should only show transient non-sensitive notices, not persistent provider status or provider configuration.
+- Indbase NL v2 assisted drafting must not send session vault context, history, trace, artifacts, previous results, vault contents, source snippets, file contents, cwd, runtime roots, or provider internals to providers; it remains one editable Source Trust Loop form, not chat, `ask`, direct execution, latest-result inference, or workflow automation.
 - Python Agent SDK package versions are separate from consoler wire `protocol_version`; SDK releases declare protocol compatibility instead of replacing manifest protocol versioning.
 - Intent candidates use `prefilled_args` and must not bypass `ActionDraft`, validation, plan, preview, approval, or execute.
 - Agent code must not inject frontend code. Agents return schemas, events, artifacts, and renderable blocks only.
@@ -459,6 +470,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/adr/0003-natural-language-intent-drafting.md`: accepted first-version boundary for deterministic natural language Intent Drafting.
 - `docs/adr/0005-versioned-python-agent-sdk.md`: accepted boundary for private/internal Python Agent SDK package versioning and upload safety.
 - `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`: accepted boundary for product variants versus agent-owned business logic.
+- `docs/adr/0007-indbase-nl-v2-intent-drafting.md`: accepted boundary for indbase variant assisted intent provider context, validation, privacy, and non-goals.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
@@ -507,6 +519,7 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/testing/v4e-indbase-variant-intent-drafting.md`: V4e gate coverage, boundaries, and closeout checklist.
 - `docs/planning/v4f-indbase-real-dogfood-friction-pass.md`: evidence-first real Source Trust Loop dogfood friction pass execution brief.
 - `docs/testing/v4f-indbase-real-dogfood-friction-pass.md`: V4f friction register, gate coverage, local-only dogfood evidence, and boundary check.
+- `docs/planning/v4g-indbase-nl-v2-intent-drafting.md`: explicit opt-in assisted indbase variant intent drafting, provider context audit, suggestion validation, and V4g gate plan.
 
 ## Done Means
 

@@ -142,6 +142,28 @@ describe("agentctl intent-draft", () => {
     expect(JSON.stringify(parsed)).not.toMatch(/api[_-]?key|endpoint|model/i);
   });
 
+  it("runIntentDraft --assist drops unsafe provider messages from human and JSON output", async () => {
+    const scope = buildIntentScopeFromManifests([fakeManifest]);
+    const assisted = await runIntentDraft({
+      text: "unrelated phrase",
+      scope,
+      assist: true,
+      provider: {
+        suggest: vi.fn(async () => ({
+          agent_id: "conformance-fake",
+          command: "conformance.static_echo",
+          prefilled_args: { message: "assisted" },
+          message: "provider endpoint: https://private.example/v1"
+        }))
+      }
+    });
+    expect(assisted.outcome).toBe("candidate");
+    const text = formatIntentDraftResult(assisted);
+    const json = formatIntentDraftJson(assisted);
+    expect(text).not.toMatch(/private\.example|provider endpoint|endpoint:/i);
+    expect(json).not.toMatch(/private\.example|provider endpoint|endpoint:/i);
+  });
+
   it("JSON output preserves runtime result shape", () => {
     const result = draftIntent({
       text: 'static echo "hello"',

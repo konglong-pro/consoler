@@ -416,14 +416,27 @@ export function App({
           return;
         }
 
-        const applyIntentDraftResult = (result: IntentDraftAssistedResult) => {
+        const applyIntentDraftResult = (
+          result: IntentDraftAssistedResult,
+          options: { assistedAttempted?: boolean } = {}
+        ) => {
           const assistMessage = result.assist_notice?.message;
+          const assistedSuccessMessage =
+            options.assistedAttempted && !result.message && !assistMessage
+              ? "Assisted drafting was used."
+              : undefined;
           if (result.outcome === "candidate") {
             setNlText("");
             nlTextRef.current = "";
             setHomeNotice(null);
+            const candidateNotice = joinNotices(
+              result.message,
+              assistMessage,
+              assistedSuccessMessage
+            );
             selectCommand(result.candidate.command, {
-              prefilledArgs: result.candidate.prefilled_args
+              prefilledArgs: result.candidate.prefilled_args,
+              ...(candidateNotice ? { formNotice: candidateNotice } : {})
             });
             return;
           }
@@ -448,6 +461,12 @@ export function App({
           return;
         }
 
+        const deterministic = draftIntent({ text, scope });
+        if (deterministic.outcome === "candidate") {
+          applyIntentDraftResult(deterministic);
+          return;
+        }
+
         setNlDraftingBusy(true);
         setHomeNotice(null);
         try {
@@ -456,7 +475,7 @@ export function App({
             scope,
             provider: assistedIntent.provider
           });
-          applyIntentDraftResult(result);
+          applyIntentDraftResult(result, { assistedAttempted: true });
         } finally {
           setNlDraftingBusy(false);
         }

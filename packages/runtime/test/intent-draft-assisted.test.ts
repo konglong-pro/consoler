@@ -44,6 +44,25 @@ const ingestScope = scopeWith(
   })
 );
 
+const searchScope = scopeWith({
+  agent_id: "indbase",
+  command: "indbase.search_sources",
+  command_description:
+    "Search trusted current source snippets with optional governed category/tag filters.",
+  args_schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["vault_path", "query"],
+    properties: {
+      vault_path: { type: "string" },
+      query: { type: "string" },
+      category: { type: "string" },
+      tag: { type: "string" },
+      top_k: { type: "integer", minimum: 1, maximum: 20 }
+    }
+  }
+});
+
 function fakeProvider(
   impl: LlmIntentProvider["suggest"]
 ): LlmIntentProvider {
@@ -68,8 +87,9 @@ describe("draftIntentAssisted", () => {
   });
 
   it("calls the provider for deterministic clarification and accepts a valid suggestion", async () => {
+    const text = "please help with vault C:\\vault and source C:\\docs\\a.md";
     const deterministic = draftIntent({
-      text: "import C:\\docs\\a.md",
+      text,
       scope: ingestScope
     });
     expect(deterministic.outcome).toBe("needs_clarification");
@@ -83,7 +103,7 @@ describe("draftIntentAssisted", () => {
       }
     }));
     const result = await draftIntentAssisted({
-      text: "import C:\\docs\\a.md",
+      text,
       scope: ingestScope,
       provider: fakeProvider(suggest)
     });
@@ -126,6 +146,22 @@ describe("draftIntentAssisted", () => {
       message: expect.stringContaining("unavailable")
     });
     expect(JSON.stringify(result)).not.toMatch(/api[_-]?key|endpoint|model/i);
+  });
+
+  it("sends only current text and scoped commands to the provider", async () => {
+    const suggest = vi.fn(async () => null);
+    await draftIntentAssisted({
+      text: "search source trust in C:\\vault",
+      scope: searchScope,
+      provider: fakeProvider(suggest)
+    });
+    expect(suggest).toHaveBeenCalledOnce();
+    const request = suggest.mock.calls[0]![0];
+    expect(Object.keys(request).sort()).toEqual(["scope", "text"]);
+    expect(request.text).toBe("search source trust in C:\\vault");
+    expect(request.scope).toEqual(searchScope);
+    const serialized = JSON.stringify(request);
+    expect(serialized).not.toMatch(/CONSOLER_ROOT|action_id|approval_id|indbase:\/\/|artifact uri|db\.sqlite/i);
   });
 
   it("falls back with assisted_timed_out when the provider is slow", async () => {
@@ -212,6 +248,214 @@ describe("draftIntentAssisted", () => {
       })
     );
     expect(result).toEqual({ ok: false, failure: "unknown_fields" });
+  });
+
+  it("rejects provider-created vault paths, source paths, and object IDs absent from current text", () => {
+    const inventedVault = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.ingest_file",
+        prefilled_args: {
+          vault_path: "C:\\invented-vault",
+          source_path: "C:\\docs\\a.md"
+        }
+      },
+      ingestScope,
+      { text: "source C:\\docs\\a.md" }
+    );
+    expect(inventedVault).toEqual({ ok: false, failure: "schema_invalid" });
+
+    const inventedDoc = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.doc_show",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          doc_id: "doc_private"
+        }
+      },
+      scopeWith({
+        agent_id: "indbase",
+        command: "indbase.doc_show",
+        command_description: "Show a document.",
+        args_schema: {
+          type: "object",
+          required: ["vault_path", "doc_id"],
+          properties: {
+            vault_path: { type: "string" },
+            doc_id: { type: "string" }
+          }
+        }
+      }),
+      { text: "show doc in C:\\vault" }
+    );
+    expect(inventedDoc).toEqual({ ok: false, failure: "schema_invalid" });
+  });
+
+  it("accepts explicit tag/category filters and rejects inferred filters", () => {
+    const accepted = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.search_sources",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          query: "source trust",
+          tag: "governance",
+          category: "research"
+        }
+      },
+      searchScope,
+      { text: "search C:\\vault tag:governance in category research" }
+    );
+    expect(accepted.ok).toBe(true);
+
+    const inferred = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.search_sources",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          query: "source trust",
+          tag: "governance"
+        }
+      },
+      searchScope,
+      { text: "search governance notes in C:\\vault" }
+    );
+    expect(inferred).toEqual({ ok: false, failure: "schema_invalid" });
+  });
+
+  it("allows short assisted query summaries but rejects source-shaped query text", () => {
+    const accepted = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.search_sources",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          query: "source trust loop"
+        }
+      },
+      searchScope,
+      { text: "look up my source trust notes in C:\\vault" }
+    );
+    expect(accepted.ok).toBe(true);
+
+    const rejected = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.search_sources",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          query: "answer: use this citation\nsource: indbase://doc/doc_1"
+        }
+      },
+      searchScope,
+      { text: "look up my source trust notes in C:\\vault" }
+    );
+    expect(rejected).toEqual({ ok: false, failure: "schema_invalid" });
+  });
+
+  it("requires numeric limits and enum values to be present in current text", () => {
+    const scoped = scopeWith({
+      agent_id: "indbase",
+      command: "indbase.review_list",
+      command_description: "List review items.",
+      args_schema: {
+        type: "object",
+        required: ["vault_path"],
+        properties: {
+          vault_path: { type: "string" },
+          limit: { type: "integer", minimum: 1, maximum: 100 },
+          status: { type: "string", enum: ["pending", "resolved"] }
+        }
+      }
+    });
+
+    const accepted = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.review_list",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          limit: 5,
+          status: "pending"
+        }
+      },
+      scoped,
+      { text: "show 5 pending review items in C:\\vault" }
+    );
+    expect(accepted.ok).toBe(true);
+
+    const rejected = suggestionToIntentResult(
+      {
+        agent_id: "indbase",
+        command: "indbase.review_list",
+        prefilled_args: {
+          vault_path: "C:\\vault",
+          limit: 5,
+          status: "pending"
+        }
+      },
+      scoped,
+      { text: "show pending review items in C:\\vault" }
+    );
+    expect(rejected).toEqual({ ok: false, failure: "schema_invalid" });
+  });
+
+  it("keeps safe provider messages and drops unsafe provider messages without rejecting candidates", () => {
+    const safe = suggestionToIntentResult(
+      {
+        agent_id: "custom",
+        command: "custom.echo",
+        prefilled_args: { message: "hello" },
+        message: "Drafted from explicit request."
+      },
+      scopeWith({
+        agent_id: "custom",
+        command: "custom.echo",
+        command_description: "Echo a message.",
+        args_schema: {
+          type: "object",
+          required: ["message"],
+          properties: {
+            message: { type: "string" }
+          }
+        }
+      })
+    );
+    expect(safe.ok).toBe(true);
+    if (safe.ok) {
+      expect(safe.result).toMatchObject({
+        outcome: "candidate",
+        message: "Drafted from explicit request."
+      });
+    }
+
+    const unsafe = suggestionToIntentResult(
+      {
+        agent_id: "custom",
+        command: "custom.echo",
+        prefilled_args: { message: "hello" },
+        message: "provider endpoint: https://private.example/v1"
+      },
+      scopeWith({
+        agent_id: "custom",
+        command: "custom.echo",
+        command_description: "Echo a message.",
+        args_schema: {
+          type: "object",
+          required: ["message"],
+          properties: {
+            message: { type: "string" }
+          }
+        }
+      })
+    );
+    expect(unsafe.ok).toBe(true);
+    if (unsafe.ok) {
+      expect(unsafe.result).toMatchObject({ outcome: "candidate" });
+      expect(unsafe.result).not.toHaveProperty("message");
+    }
   });
 
   it("falls back with assisted_invalid_output for multi-action provider output", async () => {

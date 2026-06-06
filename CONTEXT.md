@@ -30,6 +30,12 @@ A deterministic, indbase-variant-scoped natural-language drafting slice that map
 
 Indbase Variant Intent Drafting may combine a runtime `prefilled_args` result with session-local Variant Vault Context only in the TUI form layer. The runtime mapper does not infer missing `vault_path` from session state, history, cwd, or the filesystem.
 
+## Indbase NL v2 Intent Drafting
+
+An indbase Console Variant drafting phase that may use opt-in assisted intent only after deterministic drafting is insufficient, while still producing at most one editable Source Trust Loop action form. It may send the user's current text, scoped indbase action surface, product labels, field hints, and schema hints to the provider, but not session vault context, history, trace, artifact metadata, vault contents, source snippets, previous results, or filesystem reads.
+
+Indbase NL v2 Intent Drafting is still Intent Drafting. It is not chat, `ask`, direct execution, a multi-action workflow, latest-result inference, vault browsing, generated answers, or an indbase core feature.
+
 ## Source Trust Real Dogfood Friction Pass
 
 An evidence-first closeout phase for the indbase Console Variant where real local Source Trust Loop use identifies and fixes concrete TUI friction in the existing surface. It may refine consoler-owned variant UX, tests, and docs, and may make narrow indbase adapter fixes only when real dogfood proves a contract defect. It is not a new feature phase, protocol/runtime/store/schema change, Web UI, vault browser, generated-answer flow, review/category/tag mutation, or expansion of the Source Trust Loop action surface.

@@ -33,7 +33,9 @@ On Windows, `python --version` must resolve to a real Python executable before r
 | V3b intent drafting gate | Linux | Runs `pnpm test:v3b-intent-gate` after the V2 gate (runtime mapper, `agentctl intent-draft`, TUI NL entry). |
 | V3c assisted intent gate | Linux | Runs `pnpm test:v3c-assisted-intent-gate` after the V3b gate using fake-provider coverage only. |
 | V3c TUI assisted intent gate | Linux | Runs `pnpm test:v3c-tui-assisted-intent-gate` after the V3c runtime/CLI gate using fake/injected provider coverage only. |
-| V4d indbase dogfood UX gate | Local / future CI candidate | Runs `pnpm test:v4d-indbase-dogfood-ux`; fake/injected TUI coverage only, while real indbase remains local-only. |
+| V4d indbase dogfood UX gate | Linux | Runs `pnpm test:v4d-indbase-dogfood-ux`; fake/injected TUI coverage only, while real indbase remains local-only. |
+| V4e indbase variant intent drafting gate | Linux | Runs `pnpm test:v4e-indbase-variant-intent-drafting`; deterministic form-prefill coverage only. |
+| V4g indbase NL v2 intent drafting gate | Linux | Runs `pnpm test:v4g-indbase-nl-v2-intent-drafting`; fake-provider assisted coverage only. |
 | Runtime focused tests | Windows | Keeps Windows coverage narrow and fast. |
 | Agentctl focused tests | Windows | Covers Windows process/SQLite behavior. |
 | TUI focused tests | Windows | Includes V2b artifact browser flow tests. |
@@ -52,7 +54,10 @@ Default CI must not depend on `E:\indbase`, real vaults, local filesystem paths,
 | Fake-agent artifact retrieval CLI | `pnpm test:artifact-retrieval-smoke` | Yes (Linux V2 gate + Windows job) |
 | Ink artifact browser (mocked fetch) | `pnpm --filter @consoler/tui test` | Yes (Windows job) |
 | Conformance fake retrieval checks | `pnpm test:conformance` | Yes |
-| Indbase dogfood UX gate | `pnpm test:v4d-indbase-dogfood-ux` | No by default |
+| Indbase dogfood UX gate | `pnpm test:v4d-indbase-dogfood-ux` | Yes |
+| Indbase variant intent drafting gate | `pnpm test:v4e-indbase-variant-intent-drafting` | Yes |
+| Indbase NL v2 intent drafting gate | `pnpm test:v4g-indbase-nl-v2-intent-drafting` | Yes |
+| Real provider assisted intent smoke | local `pnpm tui:indbase --` with explicit provider env | No |
 | Real `indbase` ingest + `artifact-view` | `pnpm test:real-indbase-smoke` | No |
 | Real `indbase` unit tests | `uv run pytest tests/test_indbase_agent.py` from `E:\indbase` | No |
 | Manual TUI against kept smoke root | Documented in `docs/testing/v2-artifact-retrieval-closeout.md` | No |

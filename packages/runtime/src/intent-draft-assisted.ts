@@ -27,6 +27,13 @@ type ProviderValidationFailure =
   | "multi_action"
   | "malformed";
 
+interface ArgsSchemaAnalysis {
+  supported: boolean;
+  required: string[];
+  knownFields: Set<string>;
+  properties: Record<string, Record<string, unknown>>;
+}
+
 export async function draftIntentAssisted(input: {
   text: string;
   scope: IntentScope;
@@ -59,7 +66,7 @@ export async function draftIntentAssisted(input: {
     return withAssistNotice(deterministic, "assisted_unavailable");
   }
 
-  const validated = suggestionToIntentResult(suggestion, input.scope);
+  const validated = suggestionToIntentResult(suggestion, input.scope, { text: input.text });
   if (!validated.ok) {
     return withAssistNotice(deterministic, "assisted_invalid_output");
   }
@@ -69,7 +76,8 @@ export async function draftIntentAssisted(input: {
 
 export function suggestionToIntentResult(
   suggestion: LlmIntentProviderSuggestion,
-  scope: IntentScope
+  scope: IntentScope,
+  options: { text?: string } = {}
 ): { ok: true; result: IntentDraftResult } | { ok: false; failure: ProviderValidationFailure } {
   if (!isRecord(suggestion)) {
     return { ok: false, failure: "malformed" };
@@ -103,11 +111,14 @@ export function suggestionToIntentResult(
   if (hasUnknownFields(prefilledArgs, schemaAnalysis.knownFields)) {
     return { ok: false, failure: "unknown_fields" };
   }
+  if (!validateProviderPrefilledArgs(prefilledArgs, schemaAnalysis, options.text ?? "")) {
+    return { ok: false, failure: "schema_invalid" };
+  }
 
   const validation = validateCommandArgs(scopeCommand.args_schema, prefilledArgs);
   if (validation.ok) {
     const candidate = buildCandidate(scopeCommand, prefilledArgs);
-    const message = readOptionalString(suggestion.message);
+    const message = sanitizeProviderMessage(suggestion.message);
     return {
       ok: true,
       result: message ? { outcome: "candidate", candidate, message } : { outcome: "candidate", candidate }
@@ -159,26 +170,28 @@ function buildCandidate(
   return candidate;
 }
 
-function analyzeArgsSchema(argsSchema: Record<string, unknown>): {
-  supported: boolean;
-  required: string[];
-  knownFields: Set<string>;
-} {
+function analyzeArgsSchema(argsSchema: Record<string, unknown>): ArgsSchemaAnalysis {
   if (argsSchema.type !== "object") {
     return {
       supported: false,
       required: [],
-      knownFields: new Set()
+      knownFields: new Set(),
+      properties: {}
     };
   }
   const properties = isRecord(argsSchema.properties) ? argsSchema.properties : {};
+  const propertySchemas: Record<string, Record<string, unknown>> = {};
+  for (const [name, property] of Object.entries(properties)) {
+    propertySchemas[name] = isRecord(property) ? property : {};
+  }
   const required = Array.isArray(argsSchema.required)
     ? argsSchema.required.filter((entry): entry is string => typeof entry === "string")
     : [];
   return {
     supported: true,
     required,
-    knownFields: new Set(Object.keys(properties))
+    knownFields: new Set(Object.keys(properties)),
+    properties: propertySchemas
   };
 }
 
@@ -229,4 +242,198 @@ function readNonEmptyString(value: unknown): string | undefined {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function validateProviderPrefilledArgs(
+  prefilledArgs: Record<string, unknown>,
+  schemaAnalysis: ArgsSchemaAnalysis,
+  text: string
+): boolean {
+  for (const [fieldName, value] of Object.entries(prefilledArgs)) {
+    const fieldSchema = schemaAnalysis.properties[fieldName] ?? {};
+    if (!validateProviderPrefilledArg(fieldName, value, fieldSchema, text)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateProviderPrefilledArg(
+  fieldName: string,
+  value: unknown,
+  fieldSchema: Record<string, unknown>,
+  text: string
+): boolean {
+  const lowerName = fieldName.toLowerCase();
+  if (requiresLiteralCurrentText(lowerName)) {
+    return typeof value === "string" && includesLiteral(text, value);
+  }
+
+  if (isTagField(lowerName)) {
+    return typeof value === "string" && containsExplicitFilterValue(text, "tag", value);
+  }
+  if (isCategoryField(lowerName)) {
+    return typeof value === "string" && containsExplicitFilterValue(text, "category", value);
+  }
+
+  if (isQueryField(lowerName)) {
+    return validateProviderQuery(value);
+  }
+
+  if (isLimitedNumericField(lowerName)) {
+    return typeof value === "number" && includesNumberLiteral(text, value);
+  }
+
+  const enumValues = readPrimitiveEnum(fieldSchema.enum);
+  if (enumValues && enumValues.some((entry) => Object.is(entry, value))) {
+    return includesLiteralCaseInsensitive(text, String(value));
+  }
+
+  return true;
+}
+
+function requiresLiteralCurrentText(fieldName: string): boolean {
+  return [
+    "vault_path",
+    "source_path",
+    "doc_id",
+    "review_id",
+    "task_id",
+    "error_id"
+  ].includes(fieldName);
+}
+
+function isTagField(fieldName: string): boolean {
+  return fieldName === "tag" || fieldName.endsWith("_tag");
+}
+
+function isCategoryField(fieldName: string): boolean {
+  return fieldName === "category" || fieldName.endsWith("_category");
+}
+
+function isQueryField(fieldName: string): boolean {
+  return fieldName === "query" || fieldName === "search_text";
+}
+
+function isLimitedNumericField(fieldName: string): boolean {
+  return fieldName === "limit" || fieldName === "top_k";
+}
+
+function validateProviderQuery(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const query = value.trim();
+  if (query.length === 0 || query.length > 120) return false;
+  if (/[\r\n]/.test(query)) return false;
+  if (/```|indbase:\/\/|(?:^|\b)(?:answer|citation|source)\s*:/i.test(query)) return false;
+  return true;
+}
+
+function includesLiteral(text: string, value: string): boolean {
+  return value.trim().length > 0 && text.includes(value);
+}
+
+function includesLiteralCaseInsensitive(text: string, value: string): boolean {
+  return value.trim().length > 0 && text.toLowerCase().includes(value.toLowerCase());
+}
+
+function includesNumberLiteral(text: string, value: number): boolean {
+  if (!Number.isFinite(value)) return false;
+  return new RegExp(`(^|[^0-9.-])${escapeRegExp(String(value))}([^0-9.]|$)`).test(text);
+}
+
+function containsExplicitFilterValue(
+  text: string,
+  filterName: "tag" | "category",
+  expectedValue: string
+): boolean {
+  const expected = normalizeFilterValue(expectedValue);
+  if (!expected) return false;
+
+  const values: string[] = [];
+  const explicit = new RegExp(
+    `(?:^|\\s)${filterName}:("[^"]+"|'[^']+'|[^\\s"']+)`,
+    "gi"
+  );
+  collectRegexCaptures(text, explicit, values);
+
+  const phrase =
+    filterName === "tag"
+      ? /\bwith\s+tag\s+("[^"]+"|'[^']+'|[^\s"']+)/gi
+      : /\bin\s+category\s+("[^"]+"|'[^']+'|[^\s"']+)/gi;
+  collectRegexCaptures(text, phrase, values);
+
+  return values
+    .map(normalizeFilterValue)
+    .some((value) => value.toLowerCase() === expected.toLowerCase());
+}
+
+function collectRegexCaptures(text: string, regex: RegExp, values: string[]): void {
+  regex.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    values.push(match[1] ?? "");
+  }
+}
+
+function normalizeFilterValue(value: string): string {
+  const trimmed = value.trim().replace(/[,.;:\]}>]+$/u, "");
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim().replace(/[,.;:\]}>]+$/u, "");
+  }
+  return trimmed;
+}
+
+function readPrimitiveEnum(values: unknown): Array<string | number | boolean> | undefined {
+  if (
+    !Array.isArray(values) ||
+    !values.every(
+      (value) =>
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+    )
+  ) {
+    return undefined;
+  }
+  return values;
+}
+
+function sanitizeProviderMessage(value: unknown): string | undefined {
+  const message = readOptionalString(value)?.trim();
+  if (!message || message.length > 200 || /[\r\n]/.test(message)) {
+    return undefined;
+  }
+
+  const blocked = [
+    /https?:\/\//i,
+    /\bCONSOLER_INTENT_PROVIDER_URL\b/i,
+    /\bbearer\b/i,
+    /\bapi\s*key\b/i,
+    /\btoken\b/i,
+    /\bpassword\b/i,
+    /\bstack trace\b/i,
+    /\btraceback\b/i,
+    /\bprompt:/i,
+    /\braw response\b/i,
+    /\bmodel:/i,
+    /\bendpoint:/i,
+    /\baction_id\b/i,
+    /\bapproval_id\b/i,
+    /\btrace\b/i,
+    /\bartifact uri\b/i,
+    /indbase:\/\//i,
+    /\.sqlite\b/i,
+    /\bCONSOLER_ROOT\b/i
+  ];
+  if (blocked.some((pattern) => pattern.test(message))) {
+    return undefined;
+  }
+  return message;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

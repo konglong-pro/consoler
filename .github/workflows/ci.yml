@@ -73,6 +73,9 @@ jobs:
       - name: V4e indbase variant intent drafting gate
         run: pnpm test:v4e-indbase-variant-intent-drafting
 
+      - name: V4g indbase NL v2 intent drafting gate
+        run: pnpm test:v4g-indbase-nl-v2-intent-drafting
+
   windows:
     name: windows focused
     runs-on: windows-latest

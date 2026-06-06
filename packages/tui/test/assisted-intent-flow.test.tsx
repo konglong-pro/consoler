@@ -164,6 +164,49 @@ describe("product TUI assisted intent", () => {
       prefilled_args: {
         vault_path: "C:\\vault",
         source_path: "C:\\docs\\a.md"
+      },
+      message: "Drafted from explicit request."
+    }));
+
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseSourceTrustManifestFixture}
+        assistedIntent={assistedProps(suggest)}
+      />
+    );
+
+    await vi.waitFor(
+      () => expect(lastFrame() ?? "").toContain("Describe your request"),
+      WAIT_OPTS
+    );
+
+    await typeNlAndSubmit(stdin, lastFrame, "please handle vault C:\\vault and source C:\\docs\\a.md");
+    expect(suggest).toHaveBeenCalledOnce();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Import a file");
+        expect(frame).toContain("C:\\vault");
+        expect(frame).toContain("C:\\docs\\a.md");
+        expect(frame).toContain("Drafted from explicit request.");
+        expect(frame).not.toContain("Describe your request");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("does not send history, trace, or artifact context to the provider", async () => {
+    const suggest = vi.fn(async () => ({
+      agent_id: "indbase",
+      command: "indbase.ingest_file",
+      prefilled_args: {
+        vault_path: "C:\\vault",
+        source_path: "C:\\docs\\a.md"
       }
     }));
 
@@ -181,16 +224,52 @@ describe("product TUI assisted intent", () => {
       WAIT_OPTS
     );
 
-    await typeNlAndSubmit(stdin, lastFrame, "import C:\\docs\\a.md");
-    expect(suggest).toHaveBeenCalledOnce();
+    await typeNlAndSubmit(stdin, lastFrame, "please handle vault C:\\vault and source C:\\docs\\a.md");
+
+    await vi.waitFor(() => expect(suggest).toHaveBeenCalledOnce(), WAIT_OPTS);
+    const request = suggest.mock.calls[0]![0];
+    expect(Object.keys(request).sort()).toEqual(["scope", "text"]);
+    expect(request.text).toBe("please handle vault C:\\vault and source C:\\docs\\a.md");
+    const serialized = JSON.stringify(request);
+    expect(serialized).not.toContain(HISTORY_ACTION_ID);
+    expect(serialized).not.toMatch(/run_v1b_history|history smoke|duplicate|\/tmp\/vault|indbase:\/\/|CONSOLER_ROOT/i);
+
+    unmount();
+  });
+
+  it("drops unsafe provider messages and opens the form with a generic assisted notice", async () => {
+    const suggest = vi.fn(async () => ({
+      agent_id: "indbase",
+      command: "indbase.ingest_file",
+      prefilled_args: {
+        vault_path: "C:\\vault",
+        source_path: "C:\\docs\\a.md"
+      },
+      message: "provider endpoint: https://private.example/v1"
+    }));
+
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseSourceTrustManifestFixture}
+        assistedIntent={assistedProps(suggest)}
+      />
+    );
+
+    await vi.waitFor(
+      () => expect(lastFrame() ?? "").toContain("Describe your request"),
+      WAIT_OPTS
+    );
+
+    await typeNlAndSubmit(stdin, lastFrame, "please handle vault C:\\vault and source C:\\docs\\a.md");
 
     await vi.waitFor(
       () => {
         const frame = lastFrame() ?? "";
         expect(frame).toContain("Import a file");
-        expect(frame).toContain("C:\\vault");
-        expect(frame).toContain("C:\\docs\\a.md");
-        expect(frame).not.toContain("Describe your request");
+        expect(frame).toContain("Assisted drafting was used.");
+        expect(frame).not.toMatch(/private\.example|endpoint|provider endpoint/i);
       },
       WAIT_OPTS
     );
@@ -263,11 +342,17 @@ describe("product TUI assisted intent", () => {
     );
 
     await flushStdin();
-    for (const char of "import C:\\docs\\a.md") {
+    for (const char of "please handle vault C:\\vault and source C:\\docs\\a.md") {
       stdin.write(char);
       await new Promise((resolve) => setTimeout(resolve, process.platform === "win32" ? 5 : 1));
     }
-    await vi.waitFor(() => expect(lastFrame() ?? "").toContain("import C:\\docs\\a.md"), WAIT_OPTS);
+    await vi.waitFor(
+      () =>
+        expect(lastFrame() ?? "").toContain(
+          "please handle vault C:\\vault and source C:\\docs\\a.md"
+        ),
+      WAIT_OPTS
+    );
     await flushStdin();
     stdin.write("\r");
     await flushStdin();
@@ -287,7 +372,8 @@ describe("product TUI assisted intent", () => {
       prefilled_args: {
         vault_path: "C:\\vault",
         source_path: "C:\\docs\\a.md"
-      }
+      },
+      message: "Drafted from explicit request."
     });
 
     await vi.waitFor(
