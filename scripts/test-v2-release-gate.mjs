@@ -36,6 +36,7 @@ run("pnpm", ["build"]);
 run("pnpm", ["typecheck"]);
 run("pnpm", ["test"]);
 run("pnpm", ["test:python-sdk"]);
+run("pnpm", ["test:python-sdk-package"]);
 run("pnpm", ["test:conformance"]);
 run("pnpm", ["test:agentctl-smoke"]);
 run("pnpm", ["test:redaction-smoke"]);

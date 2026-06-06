@@ -30,9 +30,13 @@ Use this file as routing and workflow guidance for coding agents. It is not the 
 - V2 release gate: `pnpm test:v2-release-gate`
 - V3b intent drafting gate: `pnpm test:v3b-intent-gate`
 - V3 closeout evidence: `docs/testing/v3-closeout.md`
+- V4d indbase dogfood UX gate: `pnpm test:v4d-indbase-dogfood-ux`
+- V4e indbase variant intent drafting gate: `pnpm test:v4e-indbase-variant-intent-drafting`
 - Artifact retrieval smoke: `pnpm test:artifact-retrieval-smoke`
 - Real indbase local smoke: `pnpm test:real-indbase-smoke`
 - Python SDK tests: `pnpm test:python-sdk`
+- Python SDK package gate (wheel/sdist/install smoke): `pnpm test:python-sdk-package`
+- Python SDK publish dry-run/upload: `pnpm publish:python-sdk` (add `-- --publish` for upload; requires env vars)
 - Single package test: `pnpm --filter @consoler/protocol test`
 - TUI package test: `pnpm --filter @consoler/tui test`
 - Typecheck: `pnpm typecheck`
@@ -95,6 +99,11 @@ Prefer narrow validation for the changed package before broad checks.
 - TUI product intent entry slice: start in `docs/planning/v3b-tui-product-intent-entry.md`; add variant-scoped NL input, `IntentScope` construction from checked-in variant config, and form prefill tests without protocol, DB, agentctl, direct execution, or `E:\indbase` changes.
 - Assisted intent runtime/CLI slice: start in `docs/planning/v3c-assisted-intent-runtime-cli.md` and `docs/adr/0004-llm-assisted-intent-drafting.md`; add opt-in provider-assisted intent orchestration and `agentctl intent-draft --assist` with fake-provider gates, deterministic fallback, no protocol/DB/TUI changes, and no committed private provider details.
 - Assisted intent TUI slice: start in `docs/planning/v3c-assisted-intent-tui-entry.md` and `docs/adr/0004-llm-assisted-intent-drafting.md`; wire product TUI assisted drafting behind explicit local opt-in with transient notices, fake-provider tests, no dev-shell behavior change, and no committed private provider details.
+- Versioned Python Agent SDK: start in `docs/planning/v4a-versioned-python-agent-sdk.md` and `docs/adr/0005-versioned-python-agent-sdk.md`; package only `sdks/python` as private/internal `consoler-agent-sdk`, keep protocol compatibility separate from SDK version, validate wheel/sdist/install smoke, and do not upload from default CI.
+- Indbase Source Trust Probe: start in `docs/planning/v4b-indbase-source-trust-probe.md` and `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`; keep this repo to product variant behavior and coordinate adapter work through `E:\indbase\docs\planning\v0.3.2.3-consoler-source-trust-probe.md`.
+- Indbase Probe Stabilization: start in `docs/planning/v4c-indbase-probe-stabilization.md`; clean up real-agent smoke/conformance signals without protocol/runtime schema changes, and coordinate source-trust fixture work through `E:\indbase\docs\planning\v0.3.2.3a-consoler-probe-stabilization.md`.
+- Indbase Dogfood UX Variant: start in `docs/planning/v4d-indbase-dogfood-ux.md`; improve `pnpm tui:indbase --` for the Source Trust Loop through variant configuration and focused TUI tests, coordinating boundaries through `E:\indbase\docs\planning\v0.3.2.3c-consoler-variant-dogfood-ux.md`.
+- Indbase Variant Intent Drafting: start in `docs/planning/v4e-indbase-variant-intent-drafting.md`; add deterministic indbase-variant Source Trust Loop form prefill without protocol/runtime store changes, default LLM/assisted behavior, or `E:\indbase` implementation changes.
 - Python agent SDK: start in `sdks/python/`; implement only what the active tracer bullet needs.
 - `indbase-agent`: edit `E:\indbase` only when the task explicitly asks for the adapter or indbase API changes.
 
@@ -347,17 +356,57 @@ Prefer narrow validation for the changed package before broad checks.
   5. Use fake-provider or injected-provider coverage for default validation; do not require real provider credentials, network access, private endpoint details, or provider-specific fixtures in CI, docs, snapshots, logs, PR descriptions, or release notes.
   6. Run `pnpm --filter @consoler/tui test`, `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/agentctl test` if shared provider helper behavior changes, `pnpm test:v3c-tui-assisted-intent-gate`, `pnpm test:v3c-assisted-intent-gate`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
 
+- Versioned Python Agent SDK:
+  1. Read `CONTEXT.md`, `docs/adr/0001-agent-protocol-v0-boundaries.md`, `docs/adr/0005-versioned-python-agent-sdk.md`, and `docs/planning/v4a-versioned-python-agent-sdk.md`.
+  2. Touch only `sdks/python`, package smoke/publish scripts, root package scripts, CI gate wiring, and docs unless a package smoke exposes a narrow integration bug.
+  3. Keep the published package to Python `consoler-agent-sdk`; do not publish TypeScript packages, change protocol schemas, bump protocol version, alter runtime/TUI/agentctl behavior, or edit `E:\indbase`.
+  4. Keep SDK runtime dependencies empty unless a focused SDK bug proves one is necessary.
+  5. Do not commit private package index URLs, credentials, tokens, or upload logs. Default CI must build/check/install-smoke only and must not upload.
+  6. Run `pnpm test:python-sdk`, the new package gate once implemented, `pnpm test:conformance`, `pnpm test:v2-release-gate`, `pnpm typecheck`, `pnpm build`, `pnpm test`, and `git diff --check`.
+
+- Indbase Source Trust Probe:
+  1. Read `CONTEXT.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, `docs/planning/v3a-console-variant-product-entrypoint.md`, `docs/planning/v4b-indbase-source-trust-probe.md`, and `E:\indbase\docs\planning\v0.3.2.3-consoler-source-trust-probe.md`.
+  2. Touch only `packages/tui/src/variants/`, `packages/tui/src/variant-types.ts`, `packages/tui/src/app.tsx`, focused TUI tests, and docs unless a focused bug proves adjacent TUI helper changes are needed.
+  3. Do not edit protocol/runtime/store/transport/schema, Python SDK packaging, or `E:\indbase` from this repo.
+  4. Keep all commands on the existing action lifecycle; do not add direct execution, new renderers, full vault browser, Web UI, category/tag mutation UI, or default CI real-agent dependency.
+  5. Run `pnpm --filter @consoler/tui test`, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run optional real indbase smoke only after the adapter is available.
+
+- Indbase Probe Stabilization:
+  1. Read `CONTEXT.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, `docs/planning/v4b-indbase-source-trust-probe.md`, `docs/planning/v4c-indbase-probe-stabilization.md`, `docs/testing/real-indbase-smokes.md`, and `E:\indbase\docs\planning\v0.3.2.3a-consoler-probe-stabilization.md`.
+  2. Touch only `packages/conformance/`, `packages/agentctl/`, real indbase smoke scripts, focused tests, and docs unless a focused bug proves adjacent runtime helper changes are needed.
+  3. Do not edit protocol schemas, runtime action lifecycle semantics, Python SDK packaging, TUI product UI, or `E:\indbase` from this repo.
+  4. Keep default CI fake-agent safe; real indbase and real swallow checks must remain local-only or explicitly environment-gated.
+  5. Run `pnpm --filter @consoler/conformance test`, `pnpm --filter @consoler/agentctl test`, `pnpm test:real-indbase-smoke`, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run `pnpm --filter @consoler/tui test` if variant-facing behavior changes.
+
+- Indbase Dogfood UX Variant:
+  1. Read `CONTEXT.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, `docs/planning/v4b-indbase-source-trust-probe.md`, `docs/planning/v4c-indbase-probe-stabilization.md`, `docs/planning/v4d-indbase-dogfood-ux.md`, and `E:\indbase\docs\planning\v0.3.2.3c-consoler-variant-dogfood-ux.md`.
+  2. Touch only `packages/tui/src/variants/`, `packages/tui/src/variant-types.ts`, `packages/tui/src/app.tsx`, variant display/artifact helpers, focused TUI tests, gate scripts, and docs unless a focused test proves an adjacent TUI helper change is needed.
+  3. Do not edit protocol schemas, runtime lifecycle/store/replay semantics, Python SDK packaging, or `E:\indbase` from this repo.
+  4. Keep `vault_path` memory session-local; do not add vault discovery, vault browser, persisted preferences, or history/cwd-derived defaults.
+  5. Keep NL/intent drafting out of the v4d completion path; do not add LLM calls, chat, generated answers, retrieval packages, or indbase mutations.
+  6. Run `pnpm --filter @consoler/tui test`, the v4d gate once implemented, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run `pnpm test:real-indbase-smoke` only as local-only or explicitly environment-gated coverage.
+
+- Indbase Variant Intent Drafting:
+  1. Read `CONTEXT.md`, `docs/adr/0003-natural-language-intent-drafting.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, `docs/planning/v3b-natural-language-intent-drafting.md`, `docs/planning/v3b-runtime-intent-mapper.md`, `docs/planning/v3b-tui-product-intent-entry.md`, `docs/planning/v4d-indbase-dogfood-ux.md`, `docs/planning/v4e-indbase-variant-intent-drafting.md`, and `E:\indbase\docs\planning\v0.3.2.3d-indbase-variant-intent-drafting.md`.
+  2. Touch only `packages/runtime/src/intent-draft*.ts`, focused runtime tests, `packages/tui/src/variants/indbase.ts`, `packages/tui/src/intent-scope.ts`, `packages/tui/src/app.tsx`, focused TUI tests, gate scripts, and docs unless a focused test proves an adjacent bug.
+  3. Do not edit protocol schemas, runtime lifecycle/store/replay semantics, Python SDK packaging, provider setup, or `E:\indbase` implementation files from this repo.
+  4. Keep intent drafting deterministic, single-shot, variant-scoped, and form-prefill only; do not prepare, preview, approve, execute, persist raw NL, or create history/trace from NL submit.
+  5. Keep session `vault_path` as TUI form-layer convenience only; runtime `draftIntent` must not infer from session state, cwd, history, filesystem, trace, artifacts, or previous results.
+  6. Run `pnpm --filter @consoler/runtime test`, `pnpm --filter @consoler/tui test`, the V4e gate once implemented, `pnpm test:v3b-intent-gate`, `pnpm typecheck`, `pnpm build`, and `git diff --check`; run V3c assisted gates only if shared assisted paths are touched.
+
 ## Architecture Constraints
 
 - `consoler` never imports agent business logic. Agents are always out-of-process.
 - The first real agent is `indbase`, but `consoler` must remain business-agnostic.
 - Product-facing TUI entrypoints must enter through a checked-in Console Variant and host-product action labels; generic agent or command selection belongs to the development shell or audit/debug surfaces.
 - Console Variants may curate one agent or a product-specific agent set, but ordinary users must not install, search, or choose arbitrary agents inside the product TUI.
+- Product variants own labels, ordering, hints, and scoped navigation only; agent-specific URI parsing, vault reads, and business rules stay in the owning agent adapter.
 - Variant-scoped history and action launch must respect the variant's allowed agent/command scope; trace, JSON, replay, and `agentctl` may expose raw protocol identifiers for auditability.
 - Natural-language Intent Drafting is an acceleration path only: it must remain deterministic, ephemeral, variant-scoped, and reviewable through the existing schema form.
 - `draftIntent({ text, scope })` is a pure runtime helper; product hints flow through `IntentScope`, while `ConsoleVariantConfig` stays outside runtime/protocol.
 - LLM-assisted Intent Drafting is opt-in and deterministic-first: provider suggestions must be validated into the existing reviewable Intent Drafting result shape, and private provider configuration must not be committed or leaked.
 - Product TUI assisted drafting requires explicit local opt-in and should only show transient non-sensitive notices, not persistent provider status or provider configuration.
+- Python Agent SDK package versions are separate from consoler wire `protocol_version`; SDK releases declare protocol compatibility instead of replacing manifest protocol versioning.
 - Intent candidates use `prefilled_args` and must not bypass `ActionDraft`, validation, plan, preview, approval, or execute.
 - Agent code must not inject frontend code. Agents return schemas, events, artifacts, and renderable blocks only.
 - LLM intent mapping is out of v0. LLMs must never bypass ActionDraft, validation, plan, preview, approval, and execute.
@@ -398,6 +447,8 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/adr/0001-agent-protocol-v0-boundaries.md`: accepted v0 architecture boundaries and non-goals.
 - `docs/adr/0002-agent-owned-artifact-retrieval.md`: V2a boundary for agent-owned artifact retrieval.
 - `docs/adr/0003-natural-language-intent-drafting.md`: accepted first-version boundary for deterministic natural language Intent Drafting.
+- `docs/adr/0005-versioned-python-agent-sdk.md`: accepted boundary for private/internal Python Agent SDK package versioning and upload safety.
+- `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`: accepted boundary for product variants versus agent-owned business logic.
 - `docs/planning/v0-indbase-doctor-tracer-bullet.md`: MVP flow, acceptance criteria, and implementation sequence.
 - `docs/planning/v0b-minimal-tui.md`: next-stage execution brief for the Ink TUI.
 - `docs/planning/v1a-indbase-ingest-file-side-effect-tracer.md`: side-effect tracer brief for probe preview approval and `indbase.ingest_file`.
@@ -437,6 +488,13 @@ Prefer narrow validation for the changed package before broad checks.
 - `docs/testing/v3c-assisted-intent-gate.md`: fake-provider V3c gate and local-only provider smoke boundary.
 - `docs/planning/v3c-assisted-intent-tui-entry.md`: product TUI assisted intent slice, explicit local opt-in, transient notices, fake-provider TUI tests, and dev-shell boundary.
 - `docs/testing/v3c-tui-assisted-intent-gate.md`: fake-provider TUI gate and local-only product TUI provider smoke boundary.
+- `docs/planning/v4a-versioned-python-agent-sdk.md`: Python Agent SDK package metadata, wheel/sdist build, install smoke, dry-run publish script, CI gate, and private index boundary.
+- `docs/planning/v4b-indbase-source-trust-probe.md`: consoler-side product variant execution brief for the indbase Source Trust Loop probe.
+- `docs/planning/v4c-indbase-probe-stabilization.md`: consoler-side conformance and local smoke stabilization for the indbase Source Trust Loop.
+- `docs/planning/v4d-indbase-dogfood-ux.md`: consoler-side product UX execution brief for the indbase Source Trust Loop walkthrough.
+- `docs/testing/v4d-indbase-dogfood-ux-closeout.md`: V4d validation evidence, frozen surface, and boundary check.
+- `docs/planning/v4e-indbase-variant-intent-drafting.md`: deterministic indbase variant Source Trust Loop intent drafting execution brief.
+- `docs/testing/v4e-indbase-variant-intent-drafting.md`: V4e gate coverage, boundaries, and closeout checklist.
 
 ## Done Means
 

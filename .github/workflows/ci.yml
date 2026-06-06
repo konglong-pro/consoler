@@ -15,7 +15,7 @@ jobs:
   verify:
     name: typecheck and test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,7 +50,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install Python test deps
-        run: python -m pip install pytest
+        run: python -m pip install pytest build twine
+
+      - name: Python SDK package gate
+        run: pnpm test:python-sdk-package
 
       - name: V2 release gate
         run: pnpm test:v2-release-gate
@@ -63,6 +66,12 @@ jobs:
 
       - name: V3c TUI assisted intent gate
         run: pnpm test:v3c-tui-assisted-intent-gate
+
+      - name: V4d indbase dogfood UX gate
+        run: pnpm test:v4d-indbase-dogfood-ux
+
+      - name: V4e indbase variant intent drafting gate
+        run: pnpm test:v4e-indbase-variant-intent-drafting
 
   windows:
     name: windows focused

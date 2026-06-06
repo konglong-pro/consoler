@@ -21,9 +21,13 @@
     "test:v3b-intent-gate": "node scripts/test-v3b-intent-gate.mjs",
     "test:v3c-assisted-intent-gate": "node scripts/test-v3c-assisted-intent-gate.mjs",
     "test:v3c-tui-assisted-intent-gate": "node scripts/test-v3c-tui-assisted-intent-gate.mjs",
+    "test:v4d-indbase-dogfood-ux": "node scripts/test-v4d-indbase-dogfood-ux.mjs",
+    "test:v4e-indbase-variant-intent-drafting": "node scripts/test-v4e-indbase-variant-intent-drafting.mjs",
     "test:artifact-retrieval-smoke": "node scripts/test-artifact-retrieval-smoke.mjs",
     "test:real-indbase-smoke": "node scripts/test-real-indbase-smoke.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",
+    "test:python-sdk-package": "node scripts/test-python-sdk-package.mjs",
+    "publish:python-sdk": "node scripts/publish-python-sdk.mjs",
     "typecheck": "pnpm -r typecheck"
   },
   "pnpm": {

@@ -93,6 +93,37 @@ describe("draftIntent", () => {
     });
   });
 
+  it("does not match command tokens as substrings inside path segments", () => {
+    const docShowCommand: IntentScopeCommand = {
+      agent_id: "indbase",
+      command: "indbase.doc_show",
+      command_description: "Show one document by id.",
+      args_schema: {
+        type: "object",
+        required: ["vault_path", "doc_id"],
+        properties: {
+          vault_path: { type: "string" },
+          doc_id: { type: "string" }
+        }
+      },
+      product_label: "Open document by id",
+      action_hints: ["document id", "show document"]
+    };
+    const result = draftIntent({
+      text: "import C:\\docs\\a.md",
+      scope: scopeWith(ingestScope.commands[0]!, docShowCommand)
+    });
+
+    expect(result).toMatchObject({
+      outcome: "needs_clarification",
+      reason: "missing_required_args",
+      partial_candidate: {
+        command: "indbase.ingest_file",
+        prefilled_args: { source_path: "C:\\docs\\a.md" }
+      }
+    });
+  });
+
   it("fills both paths when vault and file hints label each path", () => {
     const result = draftIntent({
       text: "import vault C:\\vault\\data source file C:\\docs\\a.md",
@@ -416,5 +447,279 @@ describe("draftIntent", () => {
     if (result.outcome === "needs_clarification") {
       expect(result.reason).toBe("unsupported_schema");
     }
+  });
+});
+
+function sourceTrustCommand(
+  name: string,
+  description: string,
+  required: string[],
+  properties: Record<string, Record<string, unknown>>,
+  action_hints: string[],
+  field_hints: Record<string, string[]> = {}
+): IntentScopeCommand {
+  return {
+    agent_id: "indbase",
+    command: name,
+    command_description: description,
+    args_schema: {
+      type: "object",
+      additionalProperties: false,
+      required,
+      properties
+    },
+    product_label: action_hints[0],
+    action_hints,
+    field_hints
+  };
+}
+
+const sourceTrustVaultPath = {
+  type: "string",
+  description: "Path to an existing indbase vault knowledge base."
+};
+
+const sourceTrustScope = scopeWith(
+  sourceTrustCommand(
+    "indbase.doctor",
+    "Run integrity checks against an indbase vault.",
+    ["vault_path"],
+    { vault_path: sourceTrustVaultPath },
+    ["check vault", "doctor", "status", "检查", "诊断"],
+    { vault_path: ["vault", "knowledge base", "知识库"] }
+  ),
+  sourceTrustCommand(
+    "indbase.ingest_file",
+    "Ingest one local file into an indbase vault.",
+    ["vault_path", "source_path"],
+    {
+      vault_path: sourceTrustVaultPath,
+      source_path: { type: "string", description: "Path to one local source file." }
+    },
+    ["import file", "ingest", "import", "导入", "导入文件"],
+    {
+      vault_path: ["vault", "knowledge base", "知识库"],
+      source_path: ["source file", "file", "文件", "源文件"]
+    }
+  ),
+  sourceTrustCommand(
+    "indbase.search_sources",
+    "Search trusted current source snippets with optional governed category/tag filters.",
+    ["vault_path", "query"],
+    {
+      vault_path: sourceTrustVaultPath,
+      query: { type: "string", description: "Source text query." },
+      category: { type: "string", description: "Optional governed Big Category filter." },
+      tag: { type: "string", description: "Optional governed Formal Tag filter." },
+      top_k: { type: "integer", minimum: 1, maximum: 20, default: 5 }
+    },
+    ["search sources", "search", "find", "搜索", "检索"],
+    {
+      vault_path: ["vault", "knowledge base", "知识库"],
+      query: ["query", "search text", "搜索词"],
+      category: ["category", "分类", "大类"],
+      tag: ["tag", "标签"]
+    }
+  ),
+  sourceTrustCommand(
+    "indbase.doc_show",
+    "Show bounded trusted metadata and current source preview for one document ID.",
+    ["vault_path", "doc_id"],
+    {
+      vault_path: sourceTrustVaultPath,
+      doc_id: { type: "string", description: "Document ID." }
+    },
+    ["open document", "show document", "document id", "文档", "打开文档"],
+    {
+      vault_path: ["vault", "knowledge base", "知识库"],
+      doc_id: ["document id", "doc id", "文档 ID"]
+    }
+  ),
+  sourceTrustCommand(
+    "indbase.review_list",
+    "List review queue items without mutating them.",
+    ["vault_path"],
+    {
+      vault_path: sourceTrustVaultPath,
+      status: { type: "string", default: "pending" },
+      type: { type: "string" },
+      target_type: { type: "string" },
+      limit: { type: "integer", minimum: 1, maximum: 100, default: 20 }
+    },
+    ["review queue", "list reviews", "reviews", "审核队列"],
+    { vault_path: ["vault", "knowledge base", "知识库"] }
+  ),
+  sourceTrustCommand(
+    "indbase.review_show",
+    "Show one review queue item without resolving it.",
+    ["vault_path", "review_id"],
+    {
+      vault_path: sourceTrustVaultPath,
+      review_id: { type: "string", description: "Review item ID." }
+    },
+    ["review item", "show review", "review id", "审核项"],
+    {
+      vault_path: ["vault", "knowledge base", "知识库"],
+      review_id: ["review id", "审核 ID"]
+    }
+  ),
+  sourceTrustCommand(
+    "indbase.task_list",
+    "List recent task records without changing task state.",
+    ["vault_path"],
+    {
+      vault_path: sourceTrustVaultPath,
+      limit: { type: "integer", minimum: 1, maximum: 100, default: 20 }
+    },
+    ["task list", "list tasks", "tasks", "任务列表"],
+    { vault_path: ["vault", "knowledge base", "知识库"] }
+  ),
+  sourceTrustCommand(
+    "indbase.task_show",
+    "Show one task and its events without changing task state.",
+    ["vault_path", "task_id"],
+    {
+      vault_path: sourceTrustVaultPath,
+      task_id: { type: "string", description: "Task ID." }
+    },
+    ["task details", "show task", "task id", "任务详情"],
+    {
+      vault_path: ["vault", "knowledge base", "知识库"],
+      task_id: ["task id", "任务 ID"]
+    }
+  ),
+  sourceTrustCommand(
+    "indbase.error_list",
+    "List recorded errors without mutating vault state.",
+    ["vault_path"],
+    {
+      vault_path: sourceTrustVaultPath,
+      component: { type: "string" },
+      severity: { type: "string" },
+      limit: { type: "integer", minimum: 1, maximum: 100, default: 20 }
+    },
+    ["error list", "list errors", "errors", "错误列表"],
+    { vault_path: ["vault", "knowledge base", "知识库"] }
+  ),
+  sourceTrustCommand(
+    "indbase.error_show",
+    "Show one recorded error without mutating vault state.",
+    ["vault_path", "error_id"],
+    {
+      vault_path: sourceTrustVaultPath,
+      error_id: { type: "string", description: "Error ID." }
+    },
+    ["error details", "show error", "error id", "错误详情"],
+    {
+      vault_path: ["vault", "knowledge base", "知识库"],
+      error_id: ["error id", "错误 ID"]
+    }
+  )
+);
+
+function resultCommand(result: ReturnType<typeof draftIntent>): string | undefined {
+  if (result.outcome === "candidate") return result.candidate.command;
+  return result.partial_candidate?.command;
+}
+
+function resultPrefilledArgs(result: ReturnType<typeof draftIntent>): Record<string, unknown> {
+  if (result.outcome === "candidate") return result.candidate.prefilled_args;
+  return result.partial_candidate?.prefilled_args ?? {};
+}
+
+describe("draftIntent Source Trust Loop V4e", () => {
+  it("selects each Source Trust command from clear deterministic phrasing", () => {
+    const cases: Array<[string, string]> = [
+      ["check vault C:\\vault", "indbase.doctor"],
+      ["import C:\\docs\\a.md", "indbase.ingest_file"],
+      ['search "tag governance"', "indbase.search_sources"],
+      ["open document doc_20260606_abcd", "indbase.doc_show"],
+      ["review queue", "indbase.review_list"],
+      ["show review review_123", "indbase.review_show"],
+      ["list tasks", "indbase.task_list"],
+      ["show task task_123", "indbase.task_show"],
+      ["list errors", "indbase.error_list"],
+      ["show error err_123", "indbase.error_show"]
+    ];
+
+    for (const [text, expectedCommand] of cases) {
+      expect(resultCommand(draftIntent({ text, scope: sourceTrustScope }))).toBe(expectedCommand);
+    }
+  });
+
+  it("prefills search query and explicit governed filters without direct execution", () => {
+    const result = draftIntent({
+      text: 'search "tag governance" tag:taxonomy category:Research',
+      scope: sourceTrustScope
+    });
+
+    expect(result).toMatchObject({
+      outcome: "needs_clarification",
+      reason: "missing_required_args",
+      missing_required_args: ["vault_path"],
+      partial_candidate: {
+        command: "indbase.search_sources",
+        prefilled_args: {
+          query: "tag governance",
+          tag: "taxonomy",
+          category: "Research"
+        }
+      }
+    });
+  });
+
+  it("does not infer governed tag or category filters from vague search text", () => {
+    const result = draftIntent({
+      text: "search governance tags",
+      scope: sourceTrustScope
+    });
+
+    expect(resultCommand(result)).toBe("indbase.search_sources");
+    expect(resultPrefilledArgs(result)).toEqual({ query: "governance tags" });
+  });
+
+  it("extracts object IDs only from explicit object-like IDs", () => {
+    const docResult = draftIntent({
+      text: "open document doc_20260606_abcd",
+      scope: sourceTrustScope
+    });
+    expect(resultCommand(docResult)).toBe("indbase.doc_show");
+    expect(resultPrefilledArgs(docResult)).toEqual({ doc_id: "doc_20260606_abcd" });
+
+    const numericResult = draftIntent({
+      text: "open document 123",
+      scope: sourceTrustScope
+    });
+    expect(resultCommand(numericResult)).toBe("indbase.doc_show");
+    expect(resultPrefilledArgs(numericResult)).toEqual({});
+    if (numericResult.outcome === "needs_clarification") {
+      expect(numericResult.missing_required_args).toEqual(["vault_path", "doc_id"]);
+    }
+  });
+
+  it("supports Chinese Source Trust action and field phrasing", () => {
+    const searchResult = draftIntent({
+      text: '搜索 "标签治理" tag:taxonomy',
+      scope: sourceTrustScope
+    });
+    expect(resultCommand(searchResult)).toBe("indbase.search_sources");
+    expect(resultPrefilledArgs(searchResult)).toEqual({
+      query: "标签治理",
+      tag: "taxonomy"
+    });
+
+    const doctorResult = draftIntent({
+      text: "检查知识库 C:\\vault",
+      scope: sourceTrustScope
+    });
+    expect(resultCommand(doctorResult)).toBe("indbase.doctor");
+    expect(resultPrefilledArgs(doctorResult)).toEqual({ vault_path: "C:\\vault" });
+
+    const ingestResult = draftIntent({
+      text: "导入文件 C:\\docs\\a.md",
+      scope: sourceTrustScope
+    });
+    expect(resultCommand(ingestResult)).toBe("indbase.ingest_file");
+    expect(resultPrefilledArgs(ingestResult)).toEqual({ source_path: "C:\\docs\\a.md" });
   });
 });

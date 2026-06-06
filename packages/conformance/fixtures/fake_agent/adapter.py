@@ -22,6 +22,7 @@ class ConformanceFakeAdapter(AgentAdapter):
     def validate(self, command: str, args: dict[str, Any]) -> None:
         if command not in {
             "conformance.static_echo",
+            "conformance.read_only_text",
             "conformance.probe_echo",
             "conformance.slow_cancel",
             "conformance.slow_ignore_cancel",
@@ -264,6 +265,17 @@ class ConformanceFakeAdapter(AgentAdapter):
             return {
                 "blocks": [
                     markdown_block("# Should not finish", title="result"),
+                ]
+            }
+
+        if command == "conformance.read_only_text":
+            return {
+                "blocks": [
+                    markdown_block(f"# Read-only OK\n\n{args['message']}", title="result"),
+                    json_block(
+                        {"message": args["message"], "readonly": True},
+                        title="payload",
+                    ),
                 ]
             }
 

@@ -34,6 +34,10 @@ interface FieldInfo {
   pathLike: boolean;
   vaultLike: boolean;
   sourceLike: boolean;
+  queryLike: boolean;
+  tagLike: boolean;
+  categoryLike: boolean;
+  idLike: boolean;
 }
 
 interface ExtractedLiteral {
@@ -197,7 +201,7 @@ function scoreCommand(text: string, command: IntentScopeCommand): number {
   }
 
   for (const token of commandTokens(command.command)) {
-    if (token.length >= 2 && normalized.includes(token)) {
+    if (token.length >= 2 && includesAsciiToken(normalized, token)) {
       score += SCORE_COMMAND_TOKEN;
     }
   }
@@ -228,6 +232,23 @@ function normalizeText(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function includesAsciiToken(text: string, token: string): boolean {
+  let index = text.indexOf(token);
+  while (index >= 0) {
+    const before = index === 0 ? "" : text[index - 1]!;
+    const after = index + token.length >= text.length ? "" : text[index + token.length]!;
+    if (!isAsciiWordChar(before) && !isAsciiWordChar(after)) {
+      return true;
+    }
+    index = text.indexOf(token, index + token.length);
+  }
+  return false;
+}
+
+function isAsciiWordChar(value: string): boolean {
+  return /^[a-z0-9]$/i.test(value);
+}
+
 function analyzeSchema(command: IntentScopeCommand): SchemaAnalysis {
   const unsupportedFeatures = collectUnsupportedSchemaFeatures(command.args_schema);
   if (unsupportedFeatures.length > 0) {
@@ -253,15 +274,20 @@ function analyzeSchema(command: IntentScopeCommand): SchemaAnalysis {
       continue;
     }
     const hints = buildFieldHints(command, name, fieldSchema);
-    const pathLike = isPathLikeCorpus(hints.join(" "));
+    const hintCorpus = hints.join(" ");
+    const pathLike = isPathLikeCorpus(hintCorpus);
     const fieldInfo: FieldInfo = {
       name,
       type: type as PrimitiveFieldType,
       required: required.includes(name),
       hints,
       pathLike,
-      vaultLike: isVaultLikeCorpus(hints.join(" "), name),
-      sourceLike: isSourceLikeCorpus(hints.join(" "), name)
+      vaultLike: isVaultLikeCorpus(hintCorpus, name),
+      sourceLike: isSourceLikeCorpus(hintCorpus, name),
+      queryLike: isQueryLikeField(name, hintCorpus),
+      tagLike: isTagLikeField(name, hintCorpus),
+      categoryLike: isCategoryLikeField(name, hintCorpus),
+      idLike: isIdLikeField(name, hintCorpus)
     };
     const enumValues = readPrimitiveEnum(fieldSchema.enum);
     if (enumValues) {
@@ -386,6 +412,35 @@ function isSourceLikeCorpus(corpus: string, fieldName: string): boolean {
   return lower.includes("source") || lower.includes("file");
 }
 
+function isQueryLikeField(fieldName: string, corpus: string): boolean {
+  const lower = fieldName.toLowerCase();
+  if (lower === "query" || lower === "search_text") return true;
+  return (
+    lower === "text" &&
+    /query|search|检索|搜索/.test(corpus) &&
+    !/tag|category|id|标签|分类|大类/.test(corpus)
+  );
+}
+
+function isTagLikeField(fieldName: string, corpus: string): boolean {
+  const lower = fieldName.toLowerCase();
+  return lower === "tag" || lower.endsWith("_tag") || /formal tag|标签/.test(corpus);
+}
+
+function isCategoryLikeField(fieldName: string, corpus: string): boolean {
+  const lower = fieldName.toLowerCase();
+  return (
+    lower === "category" ||
+    lower.endsWith("_category") ||
+    /big category|category filter|分类|大类/.test(corpus)
+  );
+}
+
+function isIdLikeField(fieldName: string, corpus: string): boolean {
+  const lower = fieldName.toLowerCase();
+  return lower === "id" || lower.endsWith("_id") || /\bid\b/.test(corpus);
+}
+
 function hasSingleFilePathConstraint(fields: FieldInfo[]): boolean {
   const pathFields = fields.filter((field) => field.pathLike);
   return pathFields.some((field) => field.sourceLike);
@@ -467,6 +522,7 @@ function assignFields(
   const usedLiterals = new Set<number>();
 
   assignEnums(text, fields, prefilled_args);
+  assignExplicitFilters(text, fields, prefilled_args, ambiguous_fields);
 
   const pathLiterals = literals
     .map((literal, index) => ({ literal, index }))
@@ -474,6 +530,9 @@ function assignFields(
   if (pathLiterals.length > 0) {
     assignPaths(text, fields, pathLiterals, prefilled_args, ambiguous_fields, usedLiterals);
   }
+
+  assignObjectIds(text, fields, prefilled_args, ambiguous_fields);
+  assignQueryFields(text, fields, literals, prefilled_args, ambiguous_fields, usedLiterals);
 
   for (const field of fields) {
     if (prefilled_args[field.name] !== undefined) continue;
@@ -510,6 +569,231 @@ function assignEnums(
       prefilled_args[field.name] = matches[0];
     }
   }
+}
+
+function assignExplicitFilters(
+  text: string,
+  fields: FieldInfo[],
+  prefilled_args: Record<string, unknown>,
+  ambiguous_fields: string[]
+): void {
+  for (const field of fields) {
+    if (prefilled_args[field.name] !== undefined || field.type !== "string") continue;
+
+    let values: string[] = [];
+    if (field.tagLike) {
+      values = collectExplicitFilterValues(text, "tag");
+    } else if (field.categoryLike) {
+      values = collectExplicitFilterValues(text, "category");
+    }
+
+    if (values.length === 1) {
+      prefilled_args[field.name] = values[0];
+    } else if (values.length > 1) {
+      ambiguous_fields.push(field.name);
+    }
+  }
+}
+
+function collectExplicitFilterValues(text: string, filterName: "tag" | "category"): string[] {
+  const values: string[] = [];
+  const explicit = new RegExp(
+    `(?:^|\\s)${filterName}:("[^"]+"|'[^']+'|[^\\s"']+)`,
+    "gi"
+  );
+  collectRegexCaptures(text, explicit, values);
+
+  const phrase =
+    filterName === "tag"
+      ? /\bwith\s+tag\s+("[^"]+"|'[^']+'|[^\s"']+)/gi
+      : /\bin\s+category\s+("[^"]+"|'[^']+'|[^\s"']+)/gi;
+  collectRegexCaptures(text, phrase, values);
+
+  return uniqueStrings(values.map(normalizeFilterValue).filter((value) => value.length > 0));
+}
+
+function collectRegexCaptures(text: string, regex: RegExp, values: string[]): void {
+  regex.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    values.push(match[1] ?? "");
+  }
+}
+
+function normalizeFilterValue(value: string): string {
+  const trimmed = trimTrailingPunctuation(value.trim());
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimTrailingPunctuation(trimmed.slice(1, -1).trim());
+  }
+  return trimmed;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function assignObjectIds(
+  text: string,
+  fields: FieldInfo[],
+  prefilled_args: Record<string, unknown>,
+  ambiguous_fields: string[]
+): void {
+  const idFields = fields.filter(
+    (field) => field.type === "string" && field.idLike && prefilled_args[field.name] === undefined
+  );
+  if (idFields.length === 0) return;
+
+  const objectIds = extractObjectIds(text);
+  if (objectIds.length === 0) return;
+
+  for (const field of idFields) {
+    const matches = objectIds.filter((objectId) => objectIdMatchesField(text, objectId, field));
+    if (matches.length === 1) {
+      prefilled_args[field.name] = matches[0]!.value;
+    } else if (matches.length > 1) {
+      ambiguous_fields.push(field.name);
+    }
+  }
+}
+
+function extractObjectIds(text: string): Array<{ value: string; start: number; end: number }> {
+  const ids: Array<{ value: string; start: number; end: number }> = [];
+  const regex = /\b[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9][A-Za-z0-9_-]*\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const raw = match[0];
+    const value = trimTrailingPunctuation(raw);
+    if (value.length === 0) continue;
+    ids.push({ value, start: match.index, end: match.index + raw.length });
+  }
+  return ids;
+}
+
+function objectIdMatchesField(
+  text: string,
+  objectId: { value: string; start: number; end: number },
+  field: FieldInfo
+): boolean {
+  const kind = objectKindForField(field);
+  if (!kind) return objectIdHasNearbyFieldHint(text, objectId.start, field);
+
+  const normalizedId = normalizeText(objectId.value);
+  if (objectIdPrefixes(kind).some((prefix) => normalizedId.startsWith(prefix))) {
+    return true;
+  }
+
+  return objectKindAliasNear(text, objectId.start, kind);
+}
+
+function objectKindForField(field: FieldInfo): "doc" | "review" | "task" | "error" | undefined {
+  const corpus = `${field.name} ${field.hints.join(" ")}`;
+  if (/doc|document|文档/.test(corpus)) return "doc";
+  if (/review|审核|审阅/.test(corpus)) return "review";
+  if (/task|任务/.test(corpus)) return "task";
+  if (/error|err|错误/.test(corpus)) return "error";
+  return undefined;
+}
+
+function objectIdPrefixes(kind: "doc" | "review" | "task" | "error"): string[] {
+  switch (kind) {
+    case "doc":
+      return ["doc_", "document_"];
+    case "review":
+      return ["review_", "revw_"];
+    case "task":
+      return ["task_"];
+    case "error":
+      return ["error_", "err_"];
+    default:
+      return [];
+  }
+}
+
+function objectKindAliasNear(
+  text: string,
+  literalStart: number,
+  kind: "doc" | "review" | "task" | "error"
+): boolean {
+  const window = normalizeText(
+    text.slice(Math.max(0, literalStart - NEARBY_HINT_RADIUS), literalStart + NEARBY_HINT_RADIUS)
+  );
+  return objectKindAliases(kind).some((alias) => window.includes(alias));
+}
+
+function objectKindAliases(kind: "doc" | "review" | "task" | "error"): string[] {
+  switch (kind) {
+    case "doc":
+      return ["doc", "document", "文档"];
+    case "review":
+      return ["review", "审核", "审阅"];
+    case "task":
+      return ["task", "任务"];
+    case "error":
+      return ["error", "err", "错误"];
+    default:
+      return [];
+  }
+}
+
+function objectIdHasNearbyFieldHint(text: string, literalStart: number, field: FieldInfo): boolean {
+  return fieldHintsMatchNear(text, literalStart, field.hints);
+}
+
+function assignQueryFields(
+  text: string,
+  fields: FieldInfo[],
+  literals: ExtractedLiteral[],
+  prefilled_args: Record<string, unknown>,
+  ambiguous_fields: string[],
+  usedLiterals: Set<number>
+): void {
+  const queryFields = fields.filter(
+    (field) => field.type === "string" && field.queryLike && prefilled_args[field.name] === undefined
+  );
+  if (queryFields.length === 0) return;
+
+  const stringLiterals = literals
+    .map((literal, index) => ({ literal, index }))
+    .filter((entry) => entry.literal.kind === "string" && !usedLiterals.has(entry.index));
+
+  if (stringLiterals.length === 1 && queryFields.length === 1) {
+    const target = queryFields[0]!;
+    prefilled_args[target.name] = stringLiterals[0]!.literal.value;
+    usedLiterals.add(stringLiterals[0]!.index);
+    return;
+  }
+
+  if (stringLiterals.length > 1) {
+    for (const field of queryFields) ambiguous_fields.push(field.name);
+    return;
+  }
+
+  if (queryFields.length === 1) {
+    const unquotedQuery = extractUnquotedQuery(text);
+    if (unquotedQuery) {
+      prefilled_args[queryFields[0]!.name] = unquotedQuery;
+    }
+  }
+}
+
+function extractUnquotedQuery(text: string): string | undefined {
+  if (containsExplicitFilterSyntax(text)) return undefined;
+
+  const match = /(?:^|\b)(?:search|query|find|look for|搜索|检索)\s+(.+)$/iu.exec(text);
+  if (!match) return undefined;
+
+  const value = trimTrailingPunctuation((match[1] ?? "").trim());
+  if (!value || value.length < 2) return undefined;
+  if (/[A-Za-z]:[\\/]|\\\\|(?:^|\s)(?:tag|category):/i.test(value)) return undefined;
+  if (extractObjectIds(value).length > 0) return undefined;
+  return value;
+}
+
+function containsExplicitFilterSyntax(text: string): boolean {
+  return /(?:^|\s)(?:tag|category):/i.test(text) || /\b(?:with\s+tag|in\s+category)\b/i.test(text);
 }
 
 function assignPaths(
@@ -680,6 +964,10 @@ function assignScalarField(
 }
 
 function literalMatchesField(literal: ExtractedLiteral, field: FieldInfo): boolean {
+  if (field.type === "string" && (field.idLike || field.tagLike || field.categoryLike)) {
+    return false;
+  }
+
   switch (field.type) {
     case "string":
       return literal.kind === "string" || literal.kind === "url";

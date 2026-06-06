@@ -90,20 +90,49 @@ function joinNotices(...parts: Array<string | null | undefined>): string | undef
 
 function mergePrefilledFormValues(
   formFields: FormField[],
-  prefilledArgs?: Record<string, unknown>
+  prefilledArgs?: Record<string, unknown>,
+  sessionPrefillValues?: Record<string, unknown>
 ): Record<string, unknown> {
   const defaults = defaultFormValues(formFields);
-  if (!prefilledArgs) {
-    return defaults;
-  }
   const allowed = new Set(formFields.map((field) => field.name));
   const merged = { ...defaults };
+  if (sessionPrefillValues) {
+    for (const [key, value] of Object.entries(sessionPrefillValues)) {
+      if (allowed.has(key) && isSessionPrefillValue(value)) {
+        merged[key] = value;
+      }
+    }
+  }
+  if (!prefilledArgs) {
+    return merged;
+  }
   for (const [key, value] of Object.entries(prefilledArgs)) {
     if (allowed.has(key)) {
       merged[key] = value;
     }
   }
   return merged;
+}
+
+function isSessionPrefillValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.trim() !== "";
+  }
+  return value !== null && value !== undefined;
+}
+
+function collectSessionPrefillValues(
+  args: Record<string, unknown>,
+  fieldNames: string[]
+): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  for (const fieldName of fieldNames) {
+    const value = args[fieldName];
+    if (isSessionPrefillValue(value)) {
+      values[fieldName] = value;
+    }
+  }
+  return values;
 }
 
 export interface AppProps {
@@ -179,6 +208,7 @@ export function App({
   const [homeFocus, setHomeFocus] = useState<HomeFocus>("nl");
   const [homeNotice, setHomeNotice] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [sessionPrefillValues, setSessionPrefillValues] = useState<Record<string, unknown>>({});
   const [nlDraftingBusy, setNlDraftingBusy] = useState(false);
   const [artifactSource, setArtifactSource] = useState<ArtifactOpenSource | null>(null);
   const [selectedArtifactIndex, setSelectedArtifactIndex] = useState(0);
@@ -338,7 +368,11 @@ export function App({
       return;
     }
     const formFields = fieldsFromCommand(command);
-    const merged = mergePrefilledFormValues(formFields, options?.prefilledArgs);
+    const merged = mergePrefilledFormValues(
+      formFields,
+      options?.prefilledArgs,
+      sessionPrefillValues
+    );
     setSelectedCommand(commandName);
     setFields(formFields);
     formValuesRef.current = merged;
@@ -603,6 +637,16 @@ export function App({
       setExecutionOutcome(terminal.state);
       if (terminal.state === "succeeded") {
         setBlocks(blocksFromEvents(terminal.events));
+        const memoryFields = variant?.sessionPrefillFields ?? [];
+        if (memoryFields.length > 0) {
+          const nextSessionValues = collectSessionPrefillValues(
+            prepared.action.args,
+            memoryFields
+          );
+          if (Object.keys(nextSessionValues).length > 0) {
+            setSessionPrefillValues((prev) => ({ ...prev, ...nextSessionValues }));
+          }
+        }
       } else {
         setBlocks([]);
       }
@@ -800,6 +844,19 @@ export function App({
         setPhase("home");
         return;
       }
+      if (phase === "finished") {
+        setSelectedCommand(null);
+        setPreviewApproval(null);
+        setProbePreview(null);
+        setPrepared(null);
+        resetExecutionSession();
+        setEvents([]);
+        setBlocks([]);
+        setSelectedArtifactIndex(0);
+        setHomeFocus("tasks");
+        setPhase("home");
+        return;
+      }
       if (phase === "command_select" || phase === "form") {
         setFormNotice(null);
         setHomeFocus("nl");
@@ -988,7 +1045,12 @@ export function App({
 
         {phase === "trace" && trace ? (
           <Box flexDirection="column">
-            <TracePanel trace={trace} selectedArtifactBlockId={selectedArtifactBlockId} />
+            <TracePanel
+              trace={trace}
+              selectedArtifactBlockId={selectedArtifactBlockId}
+              productMode={productMode}
+              {...(variant ? { variant } : {})}
+            />
           </Box>
         ) : null}
 
@@ -1265,9 +1327,11 @@ export function App({
                   }`
                 : phase === "artifact_view"
                   ? "Esc back"
-                  : phase === "finished" && artifactBlocks.length
-                    ? "↑↓ artifact | Enter open | Ctrl+Tab JSON"
-                    : phase === "form"
+                : phase === "finished" && artifactBlocks.length
+                    ? "↑↓ artifact | Enter open | Esc home | Ctrl+Tab JSON"
+                  : phase === "finished"
+                    ? "Esc home | Ctrl+Tab JSON"
+                  : phase === "form"
                   ? "Tab/↑↓ field | Enter submit | Ctrl+Tab bottom tabs"
                   : phase === "running"
                     ? pendingInteraction?.choices?.length

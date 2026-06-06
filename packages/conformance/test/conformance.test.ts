@@ -108,6 +108,26 @@ describe("conformance harness", () => {
     ).toBe("passed");
   });
 
+  it("does not require diff or artifact blocks for read-only commands", async () => {
+    const report = await runAgentConformance({
+      agentId: FAKE_AGENT_ID,
+      registryEntry: fakeAgentRegistryEntry(),
+      command: "conformance.read_only_text",
+      args: { message: "readonly" },
+      approve: true
+    });
+    expect(report.passed).toBe(true);
+    expect(report.checks.find((row) => row.id === "execution.diff_artifact_blocks")?.status).toBe(
+      "passed"
+    );
+    expect(
+      report.checks.find((row) => row.id === "execution.diff_artifact_blocks")?.message
+    ).toContain("not required");
+    expect(
+      report.checks.find((row) => row.id === "execution.replay_block_summaries")?.status
+    ).toBe("passed");
+  });
+
   it("executes probe command with dual approval and verifies replay", async () => {
     const report = await runAgentConformance({
       agentId: FAKE_AGENT_ID,

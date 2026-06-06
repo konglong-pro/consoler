@@ -30,6 +30,8 @@ export interface ConsoleVariantConfig {
   allowedAgentIds: string[];
   allowedCommands: string[];
   actions: VariantActionDef[];
+  /** Field names whose last successful values may seed later forms in-memory. */
+  sessionPrefillFields?: string[];
   /** command -> field name -> display label */
   fieldLabels: Record<string, Record<string, VariantFieldLabel>>;
   approvalCopy: Record<string, VariantApprovalCopy>;

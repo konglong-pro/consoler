@@ -64,6 +64,10 @@ function check(
   return row;
 }
 
+function commandRequiresDiffArtifactBlocks(sideEffects: readonly string[]): boolean {
+  return sideEffects.some((effect) => effect.startsWith("write_") || effect.includes(":write"));
+}
+
 async function withAgentClient<T>(
   rootDir: string,
   agentId: string,
@@ -1194,12 +1198,22 @@ async function runExecuteChecks(
 
   const hasDiff = trace.result_blocks.some((block) => block.type === "diff");
   const hasArtifact = trace.result_blocks.some((block) => block.type === "artifact");
+  const commandDef = getCommandDef(prepared.manifest, prepared.action.command);
+  const requiresDiffArtifactBlocks = commandRequiresDiffArtifactBlocks(commandDef.side_effects);
   checks.push(
     check(
       "execution.diff_artifact_blocks",
       "Diff and artifact blocks",
-      hasDiff && hasArtifact ? "passed" : "failed",
-      `types=${trace.result_blocks.map((block) => block.type).join(",") || "none"}`
+      hasDiff && hasArtifact
+        ? "passed"
+        : requiresDiffArtifactBlocks
+          ? "failed"
+          : "passed",
+      hasDiff && hasArtifact
+        ? `types=${trace.result_blocks.map((block) => block.type).join(",") || "none"}`
+        : requiresDiffArtifactBlocks
+          ? `types=${trace.result_blocks.map((block) => block.type).join(",") || "none"}`
+          : `not required for read-only command; types=${trace.result_blocks.map((block) => block.type).join(",") || "none"}`
     )
   );
 
@@ -1210,8 +1224,16 @@ async function runExecuteChecks(
     check(
       "execution.replay_block_summaries",
       "Replay block summaries",
-      replaySummaries ? "passed" : "failed",
-      replaySummaries ? "diff/artifact summaries present" : "missing summaries in replay text"
+      replaySummaries
+        ? "passed"
+        : requiresDiffArtifactBlocks
+          ? "failed"
+          : "passed",
+      replaySummaries
+        ? "diff/artifact summaries present"
+        : requiresDiffArtifactBlocks
+          ? "missing summaries in replay text"
+          : "diff/artifact replay summaries not required for read-only command"
     )
   );
 

@@ -1,0 +1,3 @@
+# Product Variants Keep Agent-Specific UI Boundaries
+
+Product-facing consoler experiences will be implemented as checked-in Console Variants, while consoler core, protocol, runtime, transport, history, replay, SDKs, and artifact retrieval remain agent-agnostic. Agent-specific URI parsing, vault reads, command semantics, and business rules stay in the owning agent adapter, starting with the indbase Source Trust Loop probe. Variants may curate labels, task order, hints, and scoped navigation for a product, but they must not add a user-facing agent marketplace, mutate protocol schemas, or import agent business logic into consoler.

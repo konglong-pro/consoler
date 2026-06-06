@@ -2,7 +2,6 @@ import { mkdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { indbaseManifestV1aFixture } from "@consoler/protocol";
 import { ConsolerRuntime, type LlmIntentProvider } from "@consoler/runtime";
 import { cleanup, render } from "ink-testing-library";
 import React from "react";
@@ -10,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../src/app.js";
 import { indbaseVariant } from "../src/variants/indbase.js";
+import { indbaseSourceTrustManifestFixture } from "./fixtures/indbase-source-trust-manifest.js";
 import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 
 const WAIT_OPTS = { timeout: 15_000, interval: 50 } as const;
@@ -77,7 +77,7 @@ describe("product TUI assisted intent", () => {
       <App
         runtime={runtime}
         variant={indbaseVariant}
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={{ enabled: false, provider: { suggest } }}
       />
     );
@@ -103,7 +103,7 @@ describe("product TUI assisted intent", () => {
       <App
         runtime={runtime}
         variant={indbaseVariant}
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={{ enabled: true, provider: null }}
       />
     );
@@ -136,7 +136,7 @@ describe("product TUI assisted intent", () => {
       <App
         runtime={runtime}
         variant={indbaseVariant}
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={assistedProps(suggest)}
       />
     );
@@ -171,7 +171,7 @@ describe("product TUI assisted intent", () => {
       <App
         runtime={runtime}
         variant={indbaseVariant}
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={assistedProps(suggest)}
       />
     );
@@ -205,7 +205,7 @@ describe("product TUI assisted intent", () => {
       <App
         runtime={runtime}
         variant={indbaseVariant}
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={assistedProps(suggest)}
       />
     );
@@ -252,7 +252,7 @@ describe("product TUI assisted intent", () => {
       <App
         runtime={runtime}
         variant={indbaseVariant}
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={assistedProps(suggest)}
       />
     );
@@ -307,7 +307,7 @@ describe("dev shell assisted boundary", () => {
   it("does not show product NL entry when assisted env would apply", async () => {
     const { lastFrame, unmount } = render(
       <App
-        initialManifest={indbaseManifestV1aFixture}
+        initialManifest={indbaseSourceTrustManifestFixture}
         assistedIntent={{ enabled: true, provider: { suggest: vi.fn() } }}
       />
     );

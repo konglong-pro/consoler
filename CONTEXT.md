@@ -14,6 +14,60 @@ A configured product version of consoler for a specific host or agent set. The v
 
 Developer tooling such as `agentctl intent-draft` may expose explicit agent filters for debugging. Product TUI surfaces should instead respect the Console Variant's configured scope and avoid presenting arbitrary cross-agent search as the default interaction.
 
+## indbase Console Variant Probe
+
+A narrow indbase-adapted Console Variant used to dogfood trusted indbase workflows through the existing Runtime Lifecycle. It exposes product actions for bounded operations such as vault health checks, source search, review inspection, and artifact views without becoming a full indbase product UI, Web UI, or vault browser.
+
+The probe keeps consoler responsible for the TUI shell, action lifecycle, history, trace, replay, and generic artifact retrieval transport, while indbase agent code owns indbase command manifests, `indbase://` interpretation, vault reads, and calls into indbase core services.
+
+## indbase Dogfood UX Variant
+
+A consoler-owned refinement of the indbase Console Variant Probe that makes the existing Source Trust Loop easier to operate through product labels, action ordering, navigation, empty states, and smoke-tested artifact-view flows, without making natural-language drafting the primary path or adding agent business logic, protocol changes, Web UI, vault browsing, or new indbase mutations.
+
+## Indbase Variant Intent Drafting
+
+A deterministic, indbase-variant-scoped natural-language drafting slice that maps one user request to one reviewable Source Trust Loop action inside the existing indbase Console Variant. It is a form-prefill accelerator, not chat, assisted intent by default, a multi-action workflow, vault inference, direct execution, or an indbase core feature.
+
+Indbase Variant Intent Drafting may combine a runtime `prefilled_args` result with session-local Variant Vault Context only in the TUI form layer. The runtime mapper does not infer missing `vault_path` from session state, history, cwd, or the filesystem.
+
+## Single-Source Trust Walkthrough
+
+The primary indbase dogfood path in the TUI: operate one vault and one source through health check, ingest or prepared fixture state, governed search, document artifact inspection, review/task/error inspection, and traceability before broader browsing or automation is added.
+
+## Variant Vault Context
+
+A product-variant convenience value that remembers the last successful indbase vault path for TUI form prefill. It is not vault discovery, a vault list, a filesystem scanner, or indbase-owned configuration.
+
+The first version is session-local TUI memory only; it does not persist to the runtime SQLite store, config files, history-derived defaults, or cwd-derived inference.
+
+## Composed Variant Surface
+
+A product UX strategy that combines the existing home, schema form, action timeline, result blocks, artifact view panel, history, and trace surfaces instead of adding a variant-specific wizard or parallel lifecycle state machine.
+
+## Artifact Open/Back Path
+
+The minimal artifact-view UX where a user can notice an artifact block, open it intentionally, inspect the bounded agent-owned view, and return to the originating action timeline or trace. It is not an artifact gallery, arbitrary URI fetch, or persisted content cache.
+
+## Deterministic Variant Dogfood Smoke
+
+A repeatable product-variant validation using disposable synthetic indbase vault state and the real agent path. It proves the walkthrough without depending on a private vault, real swallow availability, or manual-only evidence.
+
+## Indbase Dogfood UX Gate
+
+The consoler-side release gate for the indbase Dogfood UX Variant, covering variant action surface, product labels, session-local vault prefill, artifact open/back behavior, variant-scoped history or trace behavior, copy hygiene, and optional real-indbase smoke.
+
+## Source Trust Loop Action Surface
+
+The indbase variant's ten-command action set: vault health, single-file ingest, governed source search, document inspection, review inspection, task inspection, and error inspection. Only ingest is a write action; category/tag mutation, retrieval packages, `ask`, and generated-answer workflows stay out.
+
+## Variant Copy Hygiene
+
+The narrow maintenance rule that product variant labels, help text, and intent hints should be valid, readable UTF-8 text when the variant file is touched. It is not a repository-wide localization rewrite.
+
+## Variant-Only UX Configuration
+
+Checked-in TUI configuration fields for product grouping, display copy, form prefill, and variant-local guidance. These fields do not modify the agent protocol, agent manifest, runtime store schema, or agent business logic.
+
 ## TUI Shell
 
 A reusable interface foundation for running the Runtime Lifecycle. It may support generic agent and command selection for development and debugging, but a product-facing experience should enter through a Console Variant that preconfigures the available agent scope and action context.
@@ -55,6 +109,12 @@ Reconstructing the accepted event timeline for a known `action_id` from SQLite. 
 ## Conformance Harness
 
 A reusable, read-only compatibility suite that verifies an out-of-process agent speaks the current protocol: registry entry, health, discover, manifest validation, and optional command-specific plan/preview/execute checks. Default runs are non-executing; execution requires explicit approval flags.
+
+## Python Agent SDK
+
+A versioned Python package for building out-of-process agents that speak the consoler agent protocol.
+
+The Python Agent SDK version is a package release version, not the wire `protocol_version`; SDK releases should declare which protocol version they support.
 
 ## Action History
 

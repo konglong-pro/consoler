@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { indbaseManifestV1aFixture } from "@consoler/protocol";
-
 import { buildIntentScopeFromVariant } from "../src/intent-scope.js";
 import { indbaseVariant } from "../src/variants/indbase.js";
 import { validateVariantAgainstManifest } from "../src/variant-validation.js";
+import { indbaseSourceTrustManifestFixture } from "./fixtures/indbase-source-trust-manifest.js";
 
 describe("buildIntentScopeFromVariant", () => {
   it("maps variant actions to IntentScope with product and field hints", () => {
-    const scope = buildIntentScopeFromVariant(indbaseManifestV1aFixture, indbaseVariant);
-    expect(scope.commands).toHaveLength(2);
+    const scope = buildIntentScopeFromVariant(
+      indbaseSourceTrustManifestFixture,
+      indbaseVariant
+    );
+    expect(scope.commands).toHaveLength(10);
 
     const doctor = scope.commands.find((entry) => entry.command === "indbase.doctor");
     expect(doctor).toMatchObject({
@@ -35,8 +37,8 @@ describe("buildIntentScopeFromVariant", () => {
 
   it("only includes commands allowed by the variant and present in the manifest", () => {
     const manifest = {
-      ...indbaseManifestV1aFixture,
-      commands: indbaseManifestV1aFixture.commands.filter(
+      ...indbaseSourceTrustManifestFixture,
+      commands: indbaseSourceTrustManifestFixture.commands.filter(
         (command) => command.name === "indbase.doctor"
       )
     };
@@ -45,7 +47,7 @@ describe("buildIntentScopeFromVariant", () => {
   });
 
   it("does not include actions outside the variant agent scope", () => {
-    const scope = buildIntentScopeFromVariant(indbaseManifestV1aFixture, {
+    const scope = buildIntentScopeFromVariant(indbaseSourceTrustManifestFixture, {
       ...indbaseVariant,
       actions: [
         {
@@ -57,7 +59,9 @@ describe("buildIntentScopeFromVariant", () => {
     expect(scope.commands).toEqual([]);
   });
 
-  it("indbase variant still validates against the v1a fixture manifest", () => {
-    expect(validateVariantAgainstManifest(indbaseVariant, indbaseManifestV1aFixture)).toEqual([]);
+  it("indbase variant validates against the Source Trust fixture manifest", () => {
+    expect(
+      validateVariantAgainstManifest(indbaseVariant, indbaseSourceTrustManifestFixture)
+    ).toEqual([]);
   });
 });

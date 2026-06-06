@@ -4,13 +4,18 @@ import type { ActionTrace } from "@consoler/runtime";
 
 import { EventLine } from "./blocks.js";
 import { ResultBlocksPanel } from "./result-blocks-panel.js";
+import type { ConsoleVariantConfig } from "./variant-types.js";
 
 export function TracePanel({
   trace,
-  selectedArtifactBlockId
+  selectedArtifactBlockId,
+  productMode = false,
+  variant
 }: {
   trace: ActionTrace;
   selectedArtifactBlockId?: string | null;
+  productMode?: boolean;
+  variant?: ConsoleVariantConfig;
 }) {
   return (
     <Box flexDirection="column">
@@ -133,7 +138,9 @@ export function TracePanel({
 
       <ResultBlocksPanel
         blocks={trace.result_blocks}
-        title="Result blocks"
+        title={productMode ? "Results" : "Result blocks"}
+        productMode={productMode}
+        {...(variant ? { variant } : {})}
         {...(selectedArtifactBlockId !== undefined && selectedArtifactBlockId !== null
           ? { selectedArtifactBlockId }
           : {})}

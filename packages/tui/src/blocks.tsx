@@ -109,8 +109,7 @@ export function RenderableBlockView({
       art.metadata && Object.keys(art.metadata).length > 0
         ? JSON.stringify(art.metadata)
         : null;
-    const productTitle =
-      art.label ?? artifactKindLabel(variant, art.kind) ?? (art.kind ?? "Artifact");
+    const productTitle = artifactKindLabel(variant, art.kind) ?? (art.kind ?? "Artifact");
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text bold color={highlight ? "green" : "cyan"}>
@@ -122,9 +121,7 @@ export function RenderableBlockView({
         {productMode ? (
           <>
             {art.label ? <Text>{art.label}</Text> : null}
-            {!art.label && art.kind ? (
-              <Text dimColor>{artifactKindLabel(variant, art.kind)}</Text>
-            ) : null}
+            {art.kind ? <Text dimColor>kind: {art.kind}</Text> : null}
           </>
         ) : (
           <>

@@ -44,8 +44,7 @@ export function ArtifactViewPanel({
       ? JSON.stringify(view.metadata)
       : null;
 
-  const productTitle =
-    view.title ?? artifactKindLabel(variant, view.kind) ?? "Artifact details";
+  const productTitle = artifactKindLabel(variant, view.kind) ?? "Artifact details";
 
   return (
     <Box flexDirection="column">

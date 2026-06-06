@@ -9,7 +9,14 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../src/app.js";
-import { ARTIFACT_TRACE_ACTION_ID, seedArtifactTraceFixture } from "./seed-artifact-trace.js";
+import { indbaseVariant } from "../src/variants/indbase.js";
+import { indbaseSourceTrustManifestFixture } from "./fixtures/indbase-source-trust-manifest.js";
+import {
+  ARTIFACT_TRACE_ACTION_ID,
+  INDBASE_DOCUMENT_ARTIFACT_TRACE_ACTION_ID,
+  seedArtifactTraceFixture,
+  seedIndbaseDocumentArtifactTraceFixture
+} from "./seed-artifact-trace.js";
 
 const WAIT_OPTS = { timeout: 10_000, interval: 50 } as const;
 
@@ -30,6 +37,7 @@ describe("TUI artifact browser flow", () => {
     mkdirSync(path.join(tmpRoot, ".consoler"), { recursive: true });
     runtime = new ConsolerRuntime({ rootDir: tmpRoot });
     seedArtifactTraceFixture(runtime);
+    seedIndbaseDocumentArtifactTraceFixture(runtime);
     fetchArtifactView = vi.fn();
     runtime.fetchArtifactView = fetchArtifactView;
   });
@@ -102,6 +110,89 @@ describe("TUI artifact browser flow", () => {
         expect(frame).toContain("Artifact view");
         expect(frame).toContain("Fixture view");
         expect(frame).toContain("# opened artifact");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("opens product-labeled indbase document artifacts from trace and returns with Esc", async () => {
+    fetchArtifactView.mockResolvedValue({
+      ok: true,
+      retrieval: {
+        retrieval_id: "retr_v4d_doc",
+        action_id: INDBASE_DOCUMENT_ARTIFACT_TRACE_ACTION_ID,
+        agent_id: "indbase",
+        block_id: "blk_v4d_document_artifact",
+        artifact_uri: "indbase://documents/doc_123",
+        kind: "indbase.document",
+        status: "succeeded",
+        error_code: null,
+        error_message: null,
+        requested_at: "2026-05-23T12:00:02.000Z",
+        completed_at: "2026-05-23T12:00:02.100Z"
+      },
+      view: {
+        artifact_uri: "indbase://documents/doc_123",
+        kind: "indbase.document",
+        title: "Trusted source note",
+        blocks: [
+          {
+            block_id: "blk_v4d_view_md",
+            type: "markdown",
+            content: "# document view"
+          }
+        ]
+      }
+    });
+
+    const trace = runtime.getActionTrace(INDBASE_DOCUMENT_ARTIFACT_TRACE_ACTION_ID);
+    const { lastFrame, stdin, unmount } = render(
+      <App
+        runtime={runtime}
+        variant={indbaseVariant}
+        initialManifest={indbaseSourceTrustManifestFixture}
+        testTraceView={{ trace }}
+      />
+    );
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Knowledge base document");
+        expect(frame).toContain("Trusted source note");
+        expect(frame).toContain("Enter");
+      },
+      WAIT_OPTS
+    );
+
+    stdin.write("\r");
+    await flushStdin();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(fetchArtifactView).toHaveBeenCalledWith(
+          INDBASE_DOCUMENT_ARTIFACT_TRACE_ACTION_ID,
+          "blk_v4d_document_artifact"
+        );
+        expect(frame).toContain("Knowledge base document");
+        expect(frame).toContain("Trusted source note");
+        expect(frame).toContain("# document view");
+      },
+      WAIT_OPTS
+    );
+
+    stdin.write("\u001b");
+    await flushStdin();
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Trace");
+        expect(frame).toContain("Knowledge base document");
+        expect(frame).not.toContain("# document view");
       },
       WAIT_OPTS
     );

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from consoler_agent_sdk import (
+    SUPPORTED_PROTOCOL_VERSION,
     AgentCancelled,
     AgentError,
     CancelFlag,
@@ -13,11 +14,13 @@ from consoler_agent_sdk import (
     InteractionHelper,
     JsonRpcServer,
     StepHelper,
+    __version__,
     artifact_block,
     diff_block,
     markdown_block,
     normalize_error,
 )
+import consoler_agent_sdk
 from consoler_agent_sdk.adapter import AgentAdapter
 
 
@@ -52,6 +55,13 @@ class EchoAdapter(AgentAdapter):
 
 
 MANIFEST = Path(__file__).parent / "manifest.json"
+
+
+def test_sdk_version_and_public_exports():
+    assert __version__ == "0.1.0"
+    assert SUPPORTED_PROTOCOL_VERSION == "0"
+    for name in consoler_agent_sdk.__all__:
+        assert hasattr(consoler_agent_sdk, name)
 
 
 @pytest.fixture
