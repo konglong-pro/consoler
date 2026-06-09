@@ -92,6 +92,19 @@ describe("Console Variant contract", () => {
     });
   });
 
+  it("indbase operation trace labels are presentation-only configuration", () => {
+    expect(indbaseVariant.operationTraceLabels?.domainRefs).toMatchObject({
+      task_id: "Task id",
+      doc_id: "Document id",
+      revision_id: "Revision id"
+    });
+    expect(indbaseVariant.operationTraceLabels?.capabilityRefs).toMatchObject({
+      provider: "Provider",
+      provider_run_id: "Provider run",
+      artifact_refs: "Artifact refs"
+    });
+  });
+
   it("indbase variant copy does not contain known mojibake fragments", () => {
     const payload = JSON.stringify(indbaseVariant);
     for (const fragment of [

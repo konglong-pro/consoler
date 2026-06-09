@@ -202,6 +202,95 @@ describe("action event validation", () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  it("accepts operation_trace payloads", () => {
+    const result = validateActionEvent({
+      ...baseEvent,
+      type: "action.succeeded",
+      payload: {
+        operation_trace: {
+          operation_id: "op_1",
+          action_id: "act_1",
+          agent_id: "indbase",
+          command: "indbase.doctor",
+          status: "succeeded",
+          domain_refs: {
+            task_id: "task_1",
+            doc_id: "doc_1"
+          },
+          capability_refs: [
+            {
+              provider: "swallow",
+              capability_id: "swallow.ingest",
+              provider_run_id: "prun_1",
+              status: "succeeded",
+              job_id: "job_1",
+              profile: "local",
+              operation_id: "provider_op_1",
+              manifest_ref: "indbase://artifacts/manifest",
+              trace_ref: "indbase://artifacts/trace",
+              artifact_refs: ["indbase://artifacts/output"]
+            }
+          ],
+          metadata: {
+            artifact_trust_state: "trusted_source"
+          }
+        }
+      }
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value?.payload?.operation_trace?.operation_id).toBe("op_1");
+  });
+
+  it("rejects malformed operation_trace payloads", () => {
+    const missingOperationId = validateActionEvent({
+      ...baseEvent,
+      payload: {
+        operation_trace: {
+          action_id: "act_1",
+          agent_id: "indbase",
+          command: "indbase.doctor"
+        }
+      }
+    });
+    expect(missingOperationId.ok).toBe(false);
+
+    const nonStringDomainRef = validateActionEvent({
+      ...baseEvent,
+      payload: {
+        operation_trace: {
+          operation_id: "op_1",
+          action_id: "act_1",
+          agent_id: "indbase",
+          command: "indbase.doctor",
+          domain_refs: {
+            doc_id: 1
+          }
+        }
+      }
+    });
+    expect(nonStringDomainRef.ok).toBe(false);
+
+    const missingCapabilityField = validateActionEvent({
+      ...baseEvent,
+      payload: {
+        operation_trace: {
+          operation_id: "op_1",
+          action_id: "act_1",
+          agent_id: "indbase",
+          command: "indbase.doctor",
+          capability_refs: [
+            {
+              provider: "swallow",
+              capability_id: "swallow.ingest",
+              status: "succeeded"
+            }
+          ]
+        }
+      }
+    });
+    expect(missingCapabilityField.ok).toBe(false);
+  });
 });
 
 describe("renderable block validation", () => {

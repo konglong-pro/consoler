@@ -1,0 +1,272 @@
+version: 1
+updated: 2026-06-09
+
+current:
+  consoler:
+    phase_id: v5a-operation-trace-artifact-vocabulary
+    title: Operation Trace Panel and Artifact Vocabulary
+    status: active
+    canonical_spec: docs/planning/active/v5a-operation-trace-artifact-vocabulary.md
+    agent_rules: docs/agents/current/consoler.md
+    release_gate: pnpm test:v5a-operation-trace-gate
+    status_summary: docs/project-status.md
+    allowed_areas:
+      - AGENTS.md
+      - CONTEXT.md
+      - README.md
+      - docs
+      - scripts
+      - package.json
+      - packages/protocol
+      - packages/runtime
+      - packages/agentctl
+      - packages/conformance
+      - packages/tui
+      - sdks/python
+    forbidden_areas:
+      - E:\indbase implementation files
+
+superseded:
+  root-planning-phase-paths:
+    status: superseded
+    record: docs/planning/superseded/root-planning-phase-paths.md
+    superseded_by:
+      - docs/planning/archive/README.md
+      - docs/phase-manifest.yaml
+
+  root-testing-evidence-paths:
+    status: superseded
+    record: docs/planning/superseded/root-testing-evidence-paths.md
+    superseded_by:
+      - docs/testing.md
+      - docs/testing/archive/README.md
+      - docs/phase-manifest.yaml
+
+phases:
+  docs-lifecycle-2026-06:
+    status: completed
+    canonical_spec: docs/planning/archive/docs-lifecycle/docs-lifecycle-migration.md
+    agent_rules: docs/agents/current/consoler.md
+    release_gate: pnpm docs:check
+    related_contracts:
+      - docs/contracts/consoler-agent-boundary.md
+      - docs/contracts/runtime-lifecycle-contract.md
+
+  v5a-operation-trace-artifact-vocabulary:
+    status: active
+    canonical_spec: docs/planning/active/v5a-operation-trace-artifact-vocabulary.md
+    agent_rules: docs/agents/current/consoler.md
+    closeout: docs/testing/archive/consoler-v5/v5a-operation-trace-artifact-vocabulary.md
+    release_gate: pnpm test:v5a-operation-trace-gate
+    related_contracts:
+      - docs/contracts/trace-contract.md
+      - docs/contracts/artifact-contract.md
+      - docs/contracts/console-variant-contract.md
+    related_adrs:
+      - docs/adr/0008-operation-trace-payload.md
+
+  v0:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v0/v0-indbase-doctor-tracer-bullet.md
+    related_adrs:
+      - docs/adr/0001-agent-protocol-v0-boundaries.md
+
+  v0b:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v0/v0b-minimal-tui.md
+
+  v1a:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1a-indbase-ingest-file-side-effect-tracer.md
+
+  v1b:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1b-action-history-trace-browser.md
+
+  v1c:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1c-conformance-harness.md
+
+  v1d:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1d-diff-artifact-renderable-blocks.md
+
+  v1e:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1e-real-indbase-renderable-blocks.md
+
+  v1f:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1f-cooperative-cancel.md
+
+  v1g:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1g-tui-cooperative-cancel.md
+
+  v1h:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1h-interaction-required.md
+
+  v1i:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1i-interaction-trace-persistence.md
+
+  v1j:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1j-agentctl-run-live-interactions.md
+
+  v1k:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1k-interaction-timeout-policy.md
+
+  v1l:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1l-interaction-response-redaction.md
+
+  v1m:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1m-real-indbase-interaction-adoption.md
+
+  v1n:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1n-strong-runtime-control.md
+
+  v1o:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1o-real-indbase-cooperative-cancel.md
+
+  v1p:
+    status: frozen
+    canonical_spec: docs/planning/archive/consoler-v1/v1p-v1-stabilization-release-gate.md
+    closeout: docs/testing/archive/consoler-v1/v1-closeout.md
+    release_gate: pnpm test:v1-release-gate
+
+  v1q:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v1/v1q-real-indbase-local-smokes.md
+    closeout: docs/testing/real-indbase-smokes.md
+    release_gate: pnpm test:real-indbase-smoke
+
+  v2a-protocol:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v2/v2a-artifact-retrieval-protocol-contract.md
+    related_adrs:
+      - docs/adr/0002-agent-owned-artifact-retrieval.md
+
+  v2a-cli-loop:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v2/v2a-artifact-retrieval-cli-loop.md
+    related_adrs:
+      - docs/adr/0002-agent-owned-artifact-retrieval.md
+
+  v2a-browser:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v2/v2a-artifact-retrieval-browser.md
+    related_adrs:
+      - docs/adr/0002-agent-owned-artifact-retrieval.md
+
+  v2b:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v2/v2b-artifact-browser-real-adoption.md
+    related_adrs:
+      - docs/adr/0002-agent-owned-artifact-retrieval.md
+
+  v2c:
+    status: frozen
+    canonical_spec: docs/planning/archive/consoler-v2/v2c-artifact-retrieval-closeout.md
+    closeout: docs/testing/archive/consoler-v2/v2-artifact-retrieval-closeout.md
+    release_gate: pnpm test:v2-release-gate
+
+  v3a:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3a-console-variant-product-entrypoint.md
+    related_adrs:
+      - docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md
+
+  v3b-runtime:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3b-runtime-intent-mapper.md
+    related_adrs:
+      - docs/adr/0003-natural-language-intent-drafting.md
+
+  v3b-agentctl:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3b-agentctl-intent-draft.md
+    related_adrs:
+      - docs/adr/0003-natural-language-intent-drafting.md
+
+  v3b-tui:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3b-tui-product-intent-entry.md
+    related_adrs:
+      - docs/adr/0003-natural-language-intent-drafting.md
+
+  v3b:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3b-natural-language-intent-drafting.md
+    closeout: docs/testing/archive/consoler-v3/v3b-intent-gate.md
+    release_gate: pnpm test:v3b-intent-gate
+    related_adrs:
+      - docs/adr/0003-natural-language-intent-drafting.md
+
+  v3c-runtime-cli:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3c-assisted-intent-runtime-cli.md
+    closeout: docs/testing/archive/consoler-v3/v3c-assisted-intent-gate.md
+    release_gate: pnpm test:v3c-assisted-intent-gate
+    related_adrs:
+      - docs/adr/0004-llm-assisted-intent-drafting.md
+
+  v3c-tui:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v3/v3c-assisted-intent-tui-entry.md
+    closeout: docs/testing/archive/consoler-v3/v3c-tui-assisted-intent-gate.md
+    release_gate: pnpm test:v3c-tui-assisted-intent-gate
+    related_adrs:
+      - docs/adr/0004-llm-assisted-intent-drafting.md
+
+  v4a:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4a-versioned-python-agent-sdk.md
+    release_gate: pnpm test:python-sdk-package
+    related_adrs:
+      - docs/adr/0005-versioned-python-agent-sdk.md
+
+  v4b:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4b-indbase-source-trust-probe.md
+    related_adrs:
+      - docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md
+
+  v4c:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4c-indbase-probe-stabilization.md
+
+  v4d:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4d-indbase-dogfood-ux.md
+    closeout: docs/testing/archive/consoler-v4/v4d-indbase-dogfood-ux-closeout.md
+    release_gate: pnpm test:v4d-indbase-dogfood-ux
+
+  v4e:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4e-indbase-variant-intent-drafting.md
+    closeout: docs/testing/archive/consoler-v4/v4e-indbase-variant-intent-drafting.md
+    release_gate: pnpm test:v4e-indbase-variant-intent-drafting
+
+  v4f:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4f-indbase-real-dogfood-friction-pass.md
+    closeout: docs/testing/archive/consoler-v4/v4f-indbase-real-dogfood-friction-pass.md
+    release_gate: pnpm test:v4f-indbase-real-dogfood-friction-pass
+
+  v4g:
+    status: completed
+    canonical_spec: docs/planning/archive/consoler-v4/v4g-indbase-nl-v2-intent-drafting.md
+    closeout: docs/testing/archive/consoler-v4/v4g-indbase-nl-v2-intent-drafting.md
+    release_gate: pnpm test:v4g-indbase-nl-v2-intent-drafting
+    related_adrs:
+      - docs/adr/0003-natural-language-intent-drafting.md
+      - docs/adr/0004-llm-assisted-intent-drafting.md
+      - docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md
+      - docs/adr/0007-indbase-nl-v2-intent-drafting.md

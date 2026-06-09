@@ -22,4 +22,4 @@ pnpm test
 pnpm agentctl -- discover indbase
 ```
 
-See [AGENTS.md](AGENTS.md) and [docs/planning/v0-indbase-doctor-tracer-bullet.md](docs/planning/v0-indbase-doctor-tracer-bullet.md).
+See [AGENTS.md](AGENTS.md), [docs/active/current.md](docs/active/current.md), and [docs/project-status.md](docs/project-status.md).

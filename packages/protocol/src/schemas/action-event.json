@@ -46,7 +46,15 @@
     },
     "error": { "$ref": "https://consoler.dev/schemas/v0/agent-error.json" },
     "interaction": { "$ref": "https://consoler.dev/schemas/v0/interaction-request.json" },
-    "payload": { "type": "object" }
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "operation_trace": {
+          "$ref": "https://consoler.dev/schemas/v0/operation-trace.json"
+        }
+      }
+    }
   },
   "allOf": [
     {

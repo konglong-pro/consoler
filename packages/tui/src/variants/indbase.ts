@@ -306,5 +306,28 @@ export const indbaseVariant: ConsoleVariantConfig = {
     "indbase.task": "Task",
     "indbase.error": "Error record",
     "indbase.doctor_report": "Doctor report"
+  },
+  operationTraceLabels: {
+    domainRefs: {
+      task_id: "Task id",
+      ingest_run_id: "Import run",
+      output_run_id: "Output run",
+      doc_id: "Document id",
+      revision_id: "Revision id",
+      review_id: "Review id",
+      error_id: "Error id"
+    },
+    capabilityRefs: {
+      provider: "Provider",
+      capability_id: "Capability",
+      provider_run_id: "Provider run",
+      status: "Status",
+      job_id: "Provider job",
+      profile: "Profile",
+      operation_id: "Provider operation",
+      manifest_ref: "Manifest ref",
+      trace_ref: "Trace ref",
+      artifact_refs: "Artifact refs"
+    }
   }
 };

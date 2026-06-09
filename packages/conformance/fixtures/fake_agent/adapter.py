@@ -10,6 +10,7 @@ from consoler_agent_sdk.adapter import AgentAdapter
 from consoler_agent_sdk.blocks import artifact_block, diff_block, json_block, markdown_block
 from consoler_agent_sdk.errors import AgentError
 from consoler_agent_sdk.events import EventEmitter, StepHelper
+from consoler_agent_sdk.operation_trace import operation_trace
 
 
 class ConformanceFakeAdapter(AgentAdapter):
@@ -292,6 +293,23 @@ class ConformanceFakeAdapter(AgentAdapter):
                 ]
             )
             return {
+                "operation_trace": operation_trace(
+                    operation_id=f"op-{action_id}",
+                    action_id=action_id,
+                    agent_id="conformance-fake",
+                    command=command,
+                    status="succeeded",
+                    domain_refs={"fixture_id": "conformance-fixture"},
+                    capability_refs=[
+                        {
+                            "provider": "conformance-provider",
+                            "capability_id": "conformance.echo",
+                            "provider_run_id": f"prun-{action_id}",
+                            "status": "succeeded",
+                            "artifact_refs": ["fake://artifacts/conformance-fixture"],
+                        }
+                    ],
+                ),
                 "blocks": [
                     markdown_block("# Conformance OK", title="result"),
                     json_block(

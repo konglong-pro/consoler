@@ -48,6 +48,33 @@ export function seedHistoryFixture(runtime: ConsolerRuntime): void {
     seq: 2,
     epoch: 0,
     timestamp: "2026-05-23T10:00:03.000Z",
+    payload: {
+      operation_trace: {
+        operation_id: "op_history",
+        action_id: HISTORY_ACTION_ID,
+        agent_id: "indbase",
+        command: "indbase.doctor",
+        status: "succeeded",
+        domain_refs: {
+          task_id: "task_history",
+          doc_id: "doc_history"
+        },
+        capability_refs: [
+          {
+            provider: "swallow",
+            capability_id: "swallow.inspect",
+            provider_run_id: "prun_history",
+            status: "succeeded",
+            manifest_ref: "fake://manifest/history",
+            trace_ref: "fake://trace/history",
+            artifact_refs: ["fake://artifact/history"]
+          }
+        ],
+        metadata: {
+          artifact_trust_state: "diagnostic"
+        }
+      }
+    },
     blocks: [
       {
         block_id: "blk_v1b",

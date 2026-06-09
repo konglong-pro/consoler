@@ -23,6 +23,11 @@ export interface VariantApprovalCopy {
   executePrompt?: string;
 }
 
+export interface OperationTraceLabelConfig {
+  domainRefs?: Record<string, string>;
+  capabilityRefs?: Record<string, string>;
+}
+
 export interface ConsoleVariantConfig {
   id: string;
   productName: string;
@@ -37,4 +42,5 @@ export interface ConsoleVariantConfig {
   approvalCopy: Record<string, VariantApprovalCopy>;
   /** artifact block content.kind -> product label */
   artifactKindLabels: Record<string, string>;
+  operationTraceLabels?: OperationTraceLabelConfig;
 }

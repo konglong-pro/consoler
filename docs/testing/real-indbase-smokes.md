@@ -57,7 +57,7 @@ The local-only `packages/tui/test/real-indbase-product-tui-smoke.test.tsx` smoke
 - history/trace stays variant-scoped
 - an artifact view opens from trace and returns with Esc
 
-Full manual steps are in `docs/testing/v2-artifact-retrieval-closeout.md` and `docs/testing/v4f-indbase-real-dogfood-friction-pass.md`.
+Full manual steps are in `docs/testing/archive/consoler-v2/v2-artifact-retrieval-closeout.md` and `docs/testing/archive/consoler-v4/v4f-indbase-real-dogfood-friction-pass.md`.
 
 ## Boundary
 

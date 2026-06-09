@@ -57,6 +57,7 @@ export {
   deriveActionStatus,
   getActionTrace,
   listActionHistory,
+  operationTracesFromEvents,
   resultBlocksFromEvents,
   shortActionId,
   summarizeArgs,

@@ -106,6 +106,9 @@ describe("conformance harness", () => {
     expect(
       report.checks.find((row) => row.id === "execution.artifact_retrieval_audit")?.status
     ).toBe("passed");
+    expect(
+      report.checks.find((row) => row.id === "execution.operation_trace_optional")?.message
+    ).toContain("1 operation trace");
   });
 
   it("does not require diff or artifact blocks for read-only commands", async () => {

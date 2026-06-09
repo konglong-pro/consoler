@@ -6,6 +6,107 @@ import { EventLine } from "./blocks.js";
 import { ResultBlocksPanel } from "./result-blocks-panel.js";
 import type { ConsoleVariantConfig } from "./variant-types.js";
 
+function labelFor(labels: Record<string, string> | undefined, key: string): string {
+  return labels?.[key] ?? key;
+}
+
+function OperationTracePanel({
+  trace,
+  variant
+}: {
+  trace: ActionTrace;
+  variant?: ConsoleVariantConfig;
+}) {
+  if (trace.operation_traces.length === 0) {
+    return null;
+  }
+
+  const domainLabels = variant?.operationTraceLabels?.domainRefs;
+  const capabilityLabels = variant?.operationTraceLabels?.capabilityRefs;
+
+  return (
+    <Box marginTop={1} flexDirection="column">
+      <Text bold>Operation traces ({trace.operation_traces.length})</Text>
+      {trace.operation_traces.map((operationTrace) => (
+        <Box key={operationTrace.operation_id} flexDirection="column" marginBottom={1}>
+          <Text>
+            {operationTrace.operation_id} - {operationTrace.status ?? "unknown"}
+          </Text>
+          <Text dimColor>
+            action_id: {operationTrace.action_id} agent_id: {operationTrace.agent_id} command:{" "}
+            {operationTrace.command}
+          </Text>
+          {operationTrace.domain_refs && Object.keys(operationTrace.domain_refs).length > 0 ? (
+            <Box flexDirection="column">
+              <Text dimColor>domain_refs</Text>
+              {Object.entries(operationTrace.domain_refs).map(([key, value]) => (
+                <Text key={key}>
+                  {labelFor(domainLabels, key)}: {value}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+          {operationTrace.capability_refs?.length ? (
+            <Box flexDirection="column">
+              <Text dimColor>capability_refs</Text>
+              {operationTrace.capability_refs.map((ref, index) => (
+                <Box
+                  key={`${operationTrace.operation_id}-${ref.provider}-${ref.provider_run_id}-${index}`}
+                  flexDirection="column"
+                >
+                  <Text>
+                    {labelFor(capabilityLabels, "provider")}: {ref.provider}{" "}
+                    {labelFor(capabilityLabels, "status")}: {ref.status}
+                  </Text>
+                  <Text>
+                    {labelFor(capabilityLabels, "capability_id")}: {ref.capability_id}
+                  </Text>
+                  <Text>
+                    {labelFor(capabilityLabels, "provider_run_id")}: {ref.provider_run_id}
+                  </Text>
+                  {ref.job_id ? (
+                    <Text>
+                      {labelFor(capabilityLabels, "job_id")}: {ref.job_id}
+                    </Text>
+                  ) : null}
+                  {ref.profile ? (
+                    <Text>
+                      {labelFor(capabilityLabels, "profile")}: {ref.profile}
+                    </Text>
+                  ) : null}
+                  {ref.operation_id ? (
+                    <Text>
+                      {labelFor(capabilityLabels, "operation_id")}: {ref.operation_id}
+                    </Text>
+                  ) : null}
+                  {ref.manifest_ref ? (
+                    <Text>
+                      {labelFor(capabilityLabels, "manifest_ref")}: {ref.manifest_ref}
+                    </Text>
+                  ) : null}
+                  {ref.trace_ref ? (
+                    <Text>
+                      {labelFor(capabilityLabels, "trace_ref")}: {ref.trace_ref}
+                    </Text>
+                  ) : null}
+                  {ref.artifact_refs?.length ? (
+                    <Text>
+                      {labelFor(capabilityLabels, "artifact_refs")}: {ref.artifact_refs.join(", ")}
+                    </Text>
+                  ) : null}
+                </Box>
+              ))}
+            </Box>
+          ) : null}
+          {operationTrace.metadata && Object.keys(operationTrace.metadata).length > 0 ? (
+            <Text dimColor>metadata: {JSON.stringify(operationTrace.metadata)}</Text>
+          ) : null}
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 export function TracePanel({
   trace,
   selectedArtifactBlockId,
@@ -70,6 +171,8 @@ export function TracePanel({
           ))}
         </Box>
       ) : null}
+
+      <OperationTracePanel trace={trace} {...(variant ? { variant } : {})} />
 
       {trace.interactions.length ? (
         <Box marginTop={1} flexDirection="column">
