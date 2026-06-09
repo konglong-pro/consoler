@@ -1,12 +1,12 @@
 # Project Status
 
-Last updated: 2026-06-07
+Last updated: 2026-06-09
 
 ## Current Summary
 
 `consoler` is a local agent operations console and runtime for out-of-process agents. It owns the protocol/runtime lifecycle, approvals, event streams, history, trace, replay, artifact retrieval transport, deterministic intent drafting, opt-in assisted intent orchestration, and checked-in product variant shell.
 
-The latest product phase, V4g Indbase NL v2 Intent Drafting, is completed. Current active work is documentation lifecycle migration.
+The latest completed product phase, V4g Indbase NL v2 Intent Drafting, is completed. Current active work is V5a Operation Trace Panel and Artifact Vocabulary. V5a local implementation and gate validation are complete; the phase remains current until a successor phase is approved.
 
 ## Shipped / Frozen
 
@@ -22,16 +22,17 @@ The latest product phase, V4g Indbase NL v2 Intent Drafting, is completed. Curre
 | V4e indbase Variant Intent Drafting | completed | `docs/planning/archive/consoler-v4/v4e-indbase-variant-intent-drafting.md` | `docs/testing/archive/consoler-v4/v4e-indbase-variant-intent-drafting.md` |
 | V4f real dogfood friction pass | completed | `docs/planning/archive/consoler-v4/v4f-indbase-real-dogfood-friction-pass.md` | `docs/testing/archive/consoler-v4/v4f-indbase-real-dogfood-friction-pass.md` |
 | V4g indbase NL v2 Intent Drafting | completed | `docs/planning/archive/consoler-v4/v4g-indbase-nl-v2-intent-drafting.md` | `docs/testing/archive/consoler-v4/v4g-indbase-nl-v2-intent-drafting.md` |
+| Documentation lifecycle migration | completed | `docs/planning/archive/docs-lifecycle/docs-lifecycle-migration.md` | `pnpm docs:check` |
 
 ## Active
 
 | Phase | Owner | Spec | Agent rules | Gate |
 | --- | --- | --- | --- | --- |
-| `docs-lifecycle-2026-06` Documentation Lifecycle Migration | consoler | `docs/planning/active/docs-lifecycle-migration.md` | `docs/agents/current/consoler.md` | `pnpm docs:check` |
+| `v5a-operation-trace-artifact-vocabulary` Operation Trace Panel and Artifact Vocabulary | consoler | `docs/planning/active/v5a-operation-trace-artifact-vocabulary.md` | `docs/agents/current/consoler.md` | `pnpm test:v5a-operation-trace-gate`; evidence: `docs/testing/archive/consoler-v5/v5a-operation-trace-artifact-vocabulary.md` |
 
 ## Next
 
-No next product phase is approved in this repo.
+Real indbase adoption of Operation Trace is not approved in this repo yet.
 
 ## Explicitly Out of Scope
 
@@ -42,7 +43,7 @@ No next product phase is approved in this repo.
 - Multi-action workflows or queued automation.
 - Default assisted/LLM behavior.
 - Provider setup UI or persisted provider preferences.
-- Protocol schema, runtime store, replay, transport, or Python SDK changes without active scope.
+- Runtime store migrations, trace-time provider/domain reads, or artifact wire-field renames for Operation Trace.
 - Real `E:\indbase` implementation changes unless explicitly requested.
 
 ## Local-Only Surfaces

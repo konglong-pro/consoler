@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://consoler.dev/schemas/v0/operation-trace.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operation_id", "action_id", "agent_id", "command"],
+  "properties": {
+    "operation_id": { "type": "string", "minLength": 1 },
+    "action_id": { "type": "string", "minLength": 1 },
+    "agent_id": { "type": "string", "minLength": 1 },
+    "command": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "domain_refs": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "capability_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "capability_id", "provider_run_id", "status"],
+        "properties": {
+          "provider": { "type": "string", "minLength": 1 },
+          "capability_id": { "type": "string", "minLength": 1 },
+          "provider_run_id": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "minLength": 1 },
+          "job_id": { "type": "string", "minLength": 1 },
+          "profile": { "type": "string", "minLength": 1 },
+          "operation_id": { "type": "string", "minLength": 1 },
+          "manifest_ref": { "type": "string", "minLength": 1 },
+          "trace_ref": { "type": "string", "minLength": 1 },
+          "artifact_refs": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

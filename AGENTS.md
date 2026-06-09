@@ -27,13 +27,13 @@ Read `docs/active/current.md` before implementation work.
 
 Current phase:
 
-- id: `docs-lifecycle-2026-06`
+- id: `v5a-operation-trace-artifact-vocabulary`
 - owner: `consoler`
-- canonical spec: `docs/planning/active/docs-lifecycle-migration.md`
+- canonical spec: `docs/planning/active/v5a-operation-trace-artifact-vocabulary.md`
 - agent rules: `docs/agents/current/consoler.md`
-- release gate: `pnpm docs:check`
+- release gate: `pnpm test:v5a-operation-trace-gate`
 
-The latest product phase in this repo is V4g indbase NL v2 Intent Drafting; it is completed and summarized in `docs/project-status.md`.
+The latest completed product phase is V4g indbase NL v2 Intent Drafting; it is summarized in `docs/project-status.md`.
 
 ## Repo Map
 
@@ -85,7 +85,8 @@ Route by area:
 - Console Variant or product TUI boundaries: `docs/contracts/console-variant-contract.md`, `docs/adr/0006-product-variants-keep-agent-specific-ui-boundaries.md`, then `packages/tui/`.
 - Python SDK packaging: `docs/adr/0005-versioned-python-agent-sdk.md`, then `sdks/python/`.
 - Testing, CI, or gates: `docs/testing.md`, then the relevant `scripts/test-*.mjs`.
-- Documentation lifecycle: `docs/planning/active/docs-lifecycle-migration.md`, then `docs/phase-manifest.yaml`, `docs/active/current.md`, entry files, and doc lint.
+- Documentation lifecycle: `docs/phase-manifest.yaml`, `docs/active/current.md`, entry files, and doc lint.
+- Operation Trace or artifact vocabulary: `docs/planning/active/v5a-operation-trace-artifact-vocabulary.md`, `docs/contracts/trace-contract.md`, `docs/contracts/artifact-contract.md`, `docs/contracts/console-variant-contract.md`, `docs/adr/0008-operation-trace-payload.md`, then the touched package.
 
 ## Non-Negotiable Rules
 
@@ -98,17 +99,20 @@ Route by area:
 - Do not add LLM, Web UI, vault browser, source browser, generated-answer, `ask`, mutation, or multi-action workflow behavior unless the active scope allows it.
 - Do not implement archived, superseded, or future phase work unless the user explicitly asks for that scope.
 - All durable operations must be traceable; all failures must be visible.
+- Operation Trace must be derived from accepted event payloads; trace reads must not infer it by re-reading agent/provider/domain state.
 
 ## Do Not Edit Unless Explicitly Asked
 
 - `E:\indbase` implementation files.
 - Generated outputs, dependency directories, and runtime data such as `node_modules/`, `dist/`, `coverage/`, and `.consoler/consoler.db`.
 - Lockfiles unrelated to the current dependency or package-management change.
-- Protocol schemas, runtime store migrations, transport, replay, or Python SDK behavior when the active scope is docs-only.
+- Runtime store migrations for Operation Trace in V5a.
 
 ## Validation
 
 Use `docs/testing.md` for command selection. For phase-specific gates, use `docs/phase-manifest.yaml` and `docs/active/current.md`.
+
+If the current phase gate script has not been added yet, run the focused checks listed in the active phase plan.
 
 For documentation-only changes, run:
 

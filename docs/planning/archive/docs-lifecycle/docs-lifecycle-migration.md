@@ -2,10 +2,10 @@
 doc_type: phase_plan
 phase_id: docs-lifecycle-2026-06
 title: Documentation Lifecycle Migration
-status: active
+status: completed
 owner: consoler
-canonical: true
-read_by_default: true
+canonical: false
+read_by_default: false
 supersedes: []
 superseded_by: null
 related_contracts:
@@ -72,8 +72,8 @@ Not allowed:
 - `pnpm docs:check`
 - `git diff --check`
 
-Run package tests only if code behavior changes.
+Package tests were not part of this documentation-only phase unless code behavior changed.
 
 ## Migration / Closeout
 
-Completed and frozen legacy `docs/planning/*.md` files have been moved into `docs/planning/archive/consoler-v*/` with root-relative links rewritten. Historical testing evidence has been moved into `docs/testing/archive/consoler-v*/`. Replaced root path conventions are recorded in `docs/planning/superseded/`.
+Completed and frozen legacy `docs/planning/*.md` files were moved into `docs/planning/archive/consoler-v*/` with root-relative links rewritten. Historical testing evidence was moved into `docs/testing/archive/consoler-v*/`. Replaced root path conventions are recorded in `docs/planning/superseded/`.

@@ -18,6 +18,8 @@
 
 **Trace View**: Read-only debug surface for one `action_id`; may include accepted and rejected events.
 
+**Operation Trace**: Accepted-event trace payload that summarizes an agent operation without causing consoler to re-read agent domain state.
+
 **Replay**: Accepted-event reconstruction for a known `action_id`; does not spawn agents or re-read state.
 
 **Cooperative Cancel**: Runtime asks the agent to stop; the action is not terminal until an agent terminal event is accepted or runtime control fails the run.

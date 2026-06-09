@@ -9,6 +9,7 @@ import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../src/app.js";
+import { indbaseVariant } from "../src/variants/indbase.js";
 import { HISTORY_ACTION_ID, seedHistoryFixture } from "./seed-history.js";
 
 const WAIT_OPTS = { timeout: 15_000, interval: 50 } as const;
@@ -149,6 +150,56 @@ describe("TUI history and trace flow", () => {
         expect(frame).toContain("ix_history");
         expect(frame).toContain("Proceed with doctor?");
         expect(frame).toContain('"yes"');
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("renders operation traces as read-only trace text", async () => {
+    const trace = runtime.getActionTrace(HISTORY_ACTION_ID);
+    const { lastFrame, unmount } = render(
+      <App
+        runtime={runtime}
+        initialManifest={indbaseManifestFixture}
+        testTraceView={{ trace }}
+      />
+    );
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Operation traces (1)");
+        expect(frame).toContain("op_history");
+        expect(frame).toContain("task_id: task_history");
+        expect(frame).toContain("provider_run_id: prun_history");
+        expect(frame).toContain("artifact_refs: fake://artifact/history");
+      },
+      WAIT_OPTS
+    );
+
+    unmount();
+  });
+
+  it("renders indbase operation trace labels from the variant", async () => {
+    const trace = runtime.getActionTrace(HISTORY_ACTION_ID);
+    const { lastFrame, unmount } = render(
+      <App
+        runtime={runtime}
+        initialManifest={indbaseManifestFixture}
+        variant={indbaseVariant}
+        testTraceView={{ trace }}
+      />
+    );
+
+    await vi.waitFor(
+      () => {
+        const frame = lastFrame() ?? "";
+        expect(frame).toContain("Task id: task_history");
+        expect(frame).toContain("Document id: doc_history");
+        expect(frame).toContain("Provider run: prun_history");
+        expect(frame).toContain("Manifest ref: fake://manifest/history");
       },
       WAIT_OPTS
     );

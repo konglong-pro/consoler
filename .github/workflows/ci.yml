@@ -79,6 +79,9 @@ jobs:
       - name: V4g indbase NL v2 intent drafting gate
         run: pnpm test:v4g-indbase-nl-v2-intent-drafting
 
+      - name: V5a Operation Trace gate
+        run: pnpm test:v5a-operation-trace-gate
+
   windows:
     name: windows focused
     runs-on: windows-latest

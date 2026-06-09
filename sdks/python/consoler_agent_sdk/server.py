@@ -276,10 +276,13 @@ class JsonRpcServer:
                 interaction=interaction,
             )
             blocks = result.get("blocks", [])
+            terminal_fields: dict[str, Any] = {}
             if blocks:
-                emitter.emit("action.succeeded", blocks=blocks)
-            else:
-                emitter.emit("action.succeeded")
+                terminal_fields["blocks"] = blocks
+            operation_trace = result.get("operation_trace")
+            if operation_trace is not None:
+                terminal_fields["payload"] = {"operation_trace": operation_trace}
+            emitter.emit("action.succeeded", **terminal_fields)
             return {"ok": True}
         except AgentCancelled as cancelled:
             emitter.emit(

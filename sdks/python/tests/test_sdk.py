@@ -19,6 +19,8 @@ from consoler_agent_sdk import (
     diff_block,
     markdown_block,
     normalize_error,
+    operation_trace,
+    operation_trace_payload,
 )
 import consoler_agent_sdk
 from consoler_agent_sdk.adapter import AgentAdapter
@@ -183,6 +185,87 @@ def test_diff_and_artifact_block_helpers():
     assert art["content"]["uri"] == "file:///tmp/out.txt"
     assert art["content"]["kind"] == "text/plain"
     assert art["content"]["metadata"]["bytes"] == 3
+
+
+def test_operation_trace_helpers():
+    trace = operation_trace(
+        operation_id="op_1",
+        action_id="act_1",
+        agent_id="echo",
+        command="echo.ping",
+        status="succeeded",
+        domain_refs={"doc_id": "doc_1"},
+        capability_refs=[
+            {
+                "provider": "swallow",
+                "capability_id": "swallow.ingest",
+                "provider_run_id": "prun_1",
+                "status": "succeeded",
+                "artifact_refs": ["fake://artifact/1"],
+            }
+        ],
+        metadata={"artifact_trust_state": "diagnostic"},
+    )
+    assert trace["operation_id"] == "op_1"
+    assert trace["domain_refs"]["doc_id"] == "doc_1"
+    assert trace["capability_refs"][0]["provider_run_id"] == "prun_1"
+
+    payload = operation_trace_payload(
+        operation_id="op_2",
+        action_id="act_2",
+        agent_id="echo",
+        command="echo.ping",
+    )
+    assert payload == {
+        "operation_trace": {
+            "operation_id": "op_2",
+            "action_id": "act_2",
+            "agent_id": "echo",
+            "command": "echo.ping",
+        }
+    }
+
+
+class OperationTraceAdapter(EchoAdapter):
+    def execute(self, command: str, args: dict, plan: dict, **kwargs) -> dict:
+        return {
+            "blocks": [],
+            "operation_trace": operation_trace(
+                operation_id="op_server",
+                action_id=kwargs["action_id"],
+                agent_id="echo",
+                command=command,
+                status="succeeded",
+                domain_refs={"doc_id": "doc_server"},
+            ),
+        }
+
+
+def test_run_execute_emits_operation_trace_on_terminal_success():
+    server = JsonRpcServer(OperationTraceAdapter())
+    published: list[dict] = []
+
+    def capture(message: dict) -> None:
+        if message.get("method") == "agent.event":
+            published.append(message["params"]["event"])
+
+    server._write_message = capture  # type: ignore[method-assign]
+
+    result = server._run_execute(
+        {
+            "run_id": "run_1",
+            "action_id": "act_1",
+            "command": "echo.ping",
+            "args": {},
+            "plan": {"steps": []},
+        }
+    )
+
+    assert result == {"ok": True}
+    succeeded = [event for event in published if event["type"] == "action.succeeded"]
+    assert len(succeeded) == 1
+    assert succeeded[0]["payload"]["operation_trace"]["operation_id"] == "op_server"
+    assert succeeded[0]["payload"]["operation_trace"]["domain_refs"]["doc_id"] == "doc_server"
 
 
 def test_interaction_request_and_respond():

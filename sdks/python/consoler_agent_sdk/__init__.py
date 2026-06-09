@@ -8,6 +8,7 @@ from .blocks import artifact_block, diff_block, error_block, json_block, markdow
 from .errors import AgentCancelled, AgentError, normalize_error
 from .events import CancelFlag, EventEmitter, ProgressHelper, StepHelper
 from .interaction import InteractionHelper
+from .operation_trace import operation_trace, operation_trace_payload
 from .server import JsonRpcServer
 
 SDK_NAME = "consoler_agent_sdk"
@@ -31,5 +32,7 @@ __all__ = [
     "json_block",
     "markdown_block",
     "normalize_error",
+    "operation_trace",
+    "operation_trace_payload",
     "table_block",
 ]

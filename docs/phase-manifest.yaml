@@ -1,29 +1,29 @@
 version: 1
-updated: 2026-06-07
+updated: 2026-06-09
 
 current:
   consoler:
-    phase_id: docs-lifecycle-2026-06
-    title: Documentation Lifecycle Migration
+    phase_id: v5a-operation-trace-artifact-vocabulary
+    title: Operation Trace Panel and Artifact Vocabulary
     status: active
-    canonical_spec: docs/planning/active/docs-lifecycle-migration.md
+    canonical_spec: docs/planning/active/v5a-operation-trace-artifact-vocabulary.md
     agent_rules: docs/agents/current/consoler.md
-    release_gate: pnpm docs:check
+    release_gate: pnpm test:v5a-operation-trace-gate
     status_summary: docs/project-status.md
     allowed_areas:
       - AGENTS.md
       - CONTEXT.md
       - README.md
       - docs
-      - scripts/check_docs.py
+      - scripts
       - package.json
-    forbidden_areas:
       - packages/protocol
       - packages/runtime
       - packages/agentctl
       - packages/conformance
       - packages/tui
       - sdks/python
+    forbidden_areas:
       - E:\indbase implementation files
 
 superseded:
@@ -44,13 +44,26 @@ superseded:
 
 phases:
   docs-lifecycle-2026-06:
-    status: active
-    canonical_spec: docs/planning/active/docs-lifecycle-migration.md
+    status: completed
+    canonical_spec: docs/planning/archive/docs-lifecycle/docs-lifecycle-migration.md
     agent_rules: docs/agents/current/consoler.md
     release_gate: pnpm docs:check
     related_contracts:
       - docs/contracts/consoler-agent-boundary.md
       - docs/contracts/runtime-lifecycle-contract.md
+
+  v5a-operation-trace-artifact-vocabulary:
+    status: active
+    canonical_spec: docs/planning/active/v5a-operation-trace-artifact-vocabulary.md
+    agent_rules: docs/agents/current/consoler.md
+    closeout: docs/testing/archive/consoler-v5/v5a-operation-trace-artifact-vocabulary.md
+    release_gate: pnpm test:v5a-operation-trace-gate
+    related_contracts:
+      - docs/contracts/trace-contract.md
+      - docs/contracts/artifact-contract.md
+      - docs/contracts/console-variant-contract.md
+    related_adrs:
+      - docs/adr/0008-operation-trace-payload.md
 
   v0:
     status: completed

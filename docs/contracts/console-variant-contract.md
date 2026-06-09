@@ -13,6 +13,9 @@ Define durable rules for checked-in product variants of consoler.
 - Variant-scoped history and action launch must respect the configured agent/command scope.
 - Variant vault context is session-local form-layer convenience unless a future active phase changes persistence.
 - Agent-specific URI parsing, vault reads, and business rules stay with the owning agent adapter.
+- Variants may provide Operation Trace label maps for `domain_refs` and `capability_refs`.
+- Operation Trace label maps must be presentation-only and must not add agent-specific fetch, dereference, or business-rule behavior.
+- The indbase variant may label known indbase keys, but generic trace/runtime code must keep `domain_refs` open and string-keyed.
 
 ## Non-Goals
 
@@ -20,6 +23,7 @@ Define durable rules for checked-in product variants of consoler.
 - Product-specific runtime forks.
 - Agent business logic in TUI code.
 - Hidden execution shortcuts around approval.
+- Agent-specific Operation Trace data loaders.
 
 ## Validation
 

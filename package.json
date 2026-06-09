@@ -27,6 +27,7 @@
     "test:v4e-indbase-variant-intent-drafting": "node scripts/test-v4e-indbase-variant-intent-drafting.mjs",
     "test:v4f-indbase-real-dogfood-friction-pass": "node scripts/test-v4f-indbase-real-dogfood-friction-pass.mjs",
     "test:v4g-indbase-nl-v2-intent-drafting": "node scripts/test-v4g-indbase-nl-v2-intent-drafting.mjs",
+    "test:v5a-operation-trace-gate": "node scripts/test-v5a-operation-trace-gate.mjs",
     "test:artifact-retrieval-smoke": "node scripts/test-artifact-retrieval-smoke.mjs",
     "test:real-indbase-smoke": "node scripts/test-real-indbase-smoke.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",

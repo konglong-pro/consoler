@@ -5,6 +5,7 @@ import type {
   ApprovalToken,
   ContextSnapshot,
   InteractionRequest,
+  OperationTrace,
   RenderableBlock
 } from "@consoler/protocol";
 
@@ -103,6 +104,7 @@ export interface ActionTrace {
   runs: ActionRunSummary[];
   accepted_events: ActionEvent[];
   rejected_events: RejectedEventRecord[];
+  operation_traces: OperationTrace[];
   result_blocks: RenderableBlock[];
   terminal_state: ActionHistoryStatus | null;
   latest_run_id: string | null;

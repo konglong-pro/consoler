@@ -1,6 +1,6 @@
 # Current Active Work
 
-Last updated: 2026-06-07
+Last updated: 2026-06-09
 
 Source of current phase: `docs/phase-manifest.yaml`
 
@@ -8,26 +8,32 @@ Source of current phase: `docs/phase-manifest.yaml`
 
 `consoler` has shipped the core protocol/runtime tracer bullet, V1 lifecycle hardening, V2 artifact retrieval/browser, V3 deterministic and assisted Intent Drafting foundations, and V4 indbase Console Variant work through V4g.
 
-The latest product phase, V4g indbase NL v2 Intent Drafting, is completed and has closeout evidence in `docs/testing/archive/consoler-v4/v4g-indbase-nl-v2-intent-drafting.md`.
+The latest completed product phase, V4g indbase NL v2 Intent Drafting, has closeout evidence in `docs/testing/archive/consoler-v4/v4g-indbase-nl-v2-intent-drafting.md`.
 
-Active work now is documentation lifecycle migration:
+The documentation lifecycle migration is completed and archived at `docs/planning/archive/docs-lifecycle/docs-lifecycle-migration.md`.
 
-- phase id: `docs-lifecycle-2026-06`
+Active work now is V5a Operation Trace Panel and Artifact Vocabulary:
+
+- phase id: `v5a-operation-trace-artifact-vocabulary`
 - owner: `consoler`
-- canonical spec: `docs/planning/active/docs-lifecycle-migration.md`
+- canonical spec: `docs/planning/active/v5a-operation-trace-artifact-vocabulary.md`
 - agent rules: `docs/agents/current/consoler.md`
-- gate: `pnpm docs:check`
+- planned release gate: `pnpm test:v5a-operation-trace-gate`
 
-Next product work: none approved in this repo.
+Next product work after V5a: real indbase adoption and dogfood smokes are not approved in this repo yet.
 
 ## Required Reading for Current Work
 
-For documentation lifecycle work:
+For V5a work:
 
-- `docs/planning/active/docs-lifecycle-migration.md`
+- `docs/planning/active/v5a-operation-trace-artifact-vocabulary.md`
 - `docs/phase-manifest.yaml`
-- `docs/project-status.md`
 - `docs/agents/current/consoler.md`
+- `docs/contracts/trace-contract.md`
+- `docs/contracts/artifact-contract.md`
+- `docs/contracts/console-variant-contract.md`
+- `docs/adr/0008-operation-trace-payload.md`
+- `docs/project-status.md`
 
 For consoler product/runtime changes after this migration:
 
@@ -47,15 +53,15 @@ For indbase Console Variant tasks in this repo:
 
 ## Explicitly Out of Scope
 
-Out of scope for current docs lifecycle work:
+Out of scope for current V5a work:
 
-- product behavior changes
-- protocol schema changes
 - runtime store migrations
-- replay or transport changes
-- TUI behavior changes
-- Python SDK behavior
 - real `E:\indbase` implementation changes
+- trace-time reads of vault state, source files, artifact content, provider state, or agent domain state
+- parsing or dereferencing agent-owned or provider-owned refs inside consoler
+- new artifact open behavior beyond existing `action_id + block_id` retrieval
+- renaming existing artifact block or artifact view wire fields
+- making `artifact_trust_state` a protocol enum
 - Web UI
 - vault/source browser
 - `ask`
@@ -66,14 +72,15 @@ Out of scope for current docs lifecycle work:
 
 ## Current Gates
 
-- `pnpm docs:check`: documentation lifecycle lint from `scripts/check_docs.py`.
-- `git diff --check`: whitespace check.
+- Planned phase gate to add during implementation: `pnpm test:v5a-operation-trace-gate`.
+- Current documentation prep gate: `pnpm docs:check`.
+- Whitespace check: `git diff --check`.
 
-Run package tests only if code outside docs/scripts/package metadata is changed.
+Run focused package tests as listed in the V5a phase plan when implementation touches code.
 
 ## Notes for Implementation Agents
 
-- The manifest owns current phase identity and state.
-- `AGENTS.md` and `CONTEXT.md` are bootloaders; keep them compact.
-- Contracts hold durable rules. ADRs hold durable decisions. Planning docs hold scoped implementation work. Status docs compress shipped history.
-- Completed and frozen phase plans live under `docs/planning/archive/`; read them through `docs/project-status.md` or explicit manifest links.
+- Operation Trace must be emitted by agents and persisted as accepted event payload data; consoler must not infer it by re-reading agent/provider state.
+- The first Operation Trace Panel is read-only and text-only.
+- Artifact vocabulary is standardized without renaming current wire fields.
+- `AGENTS.md` and `CONTEXT.md` remain bootloaders; put implementation detail in the active phase plan and durable rules in contracts/ADRs.

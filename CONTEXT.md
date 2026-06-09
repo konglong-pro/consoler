@@ -22,6 +22,8 @@ Read only the glossary pack relevant to your task. Do not load every glossary fi
 
 **Trace View**: Read-only debugging surface for one `action_id`, including accepted and rejected events. Replay remains accepted-events-only.
 
+**Operation Trace**: Agent-emitted structured summary that links one consoler action to agent-owned domain references and capability provider references.
+
 ## Glossary Packs
 
 - Core runtime and action terms: `docs/glossary/core.md`

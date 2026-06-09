@@ -1152,6 +1152,17 @@ async function runExecuteChecks(
     )
   );
 
+  checks.push(
+    check(
+      "execution.operation_trace_optional",
+      "Operation Trace optional",
+      "passed",
+      trace.operation_traces.length > 0
+        ? `${trace.operation_traces.length} operation trace(s)`
+        : "not emitted"
+    )
+  );
+
   const replay = runtime.getReplay(actionId);
   if (replay.events.length !== trace.accepted_events.length) {
     checks.push(

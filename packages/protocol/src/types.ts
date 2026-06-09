@@ -104,6 +104,35 @@ export interface ArtifactView {
   blocks: RenderableBlock[];
 }
 
+export interface OperationTraceCapabilityRef {
+  provider: string;
+  capability_id: string;
+  provider_run_id: string;
+  status: string;
+  job_id?: string;
+  profile?: string;
+  operation_id?: string;
+  manifest_ref?: string;
+  trace_ref?: string;
+  artifact_refs?: string[];
+}
+
+export interface OperationTrace {
+  operation_id: string;
+  action_id: string;
+  agent_id: string;
+  command: string;
+  status?: string;
+  domain_refs?: Record<string, string>;
+  capability_refs?: OperationTraceCapabilityRef[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ActionEventPayload {
+  operation_trace?: OperationTrace;
+  [key: string]: unknown;
+}
+
 export interface ActionDraft {
   action_id: string;
   agent_id: string;
@@ -194,7 +223,7 @@ export interface ActionEvent {
   blocks?: RenderableBlock[];
   error?: AgentError;
   interaction?: InteractionRequest;
-  payload?: Record<string, unknown>;
+  payload?: ActionEventPayload;
 }
 
 export interface JsonRpcRequest {

@@ -2,6 +2,12 @@ import type { ActionHistoryEntry, ActionTrace } from "./action-read-types.js";
 import { shortActionId } from "./action-read.js";
 import { summarizeRenderableBlock } from "./format-block.js";
 
+function formatRecord(record: Record<string, string>): string {
+  return Object.entries(record)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ");
+}
+
 export function formatActionHistory(entries: ActionHistoryEntry[]): string {
   if (entries.length === 0) {
     return "No actions in history.";
@@ -76,6 +82,44 @@ export function formatActionTrace(trace: ActionTrace): string {
       );
       if (run.control_error) {
         lines.push(`    ${run.control_error.message}`);
+      }
+    }
+    lines.push("");
+  }
+
+  if (trace.operation_traces.length) {
+    lines.push(`Operation traces (${trace.operation_traces.length}):`);
+    for (const operationTrace of trace.operation_traces) {
+      lines.push(
+        `  ${operationTrace.operation_id} status=${operationTrace.status ?? "-"} action=${operationTrace.action_id}`
+      );
+      lines.push(`    agent=${operationTrace.agent_id} command=${operationTrace.command}`);
+      if (operationTrace.domain_refs && Object.keys(operationTrace.domain_refs).length > 0) {
+        lines.push(`    domain_refs: ${formatRecord(operationTrace.domain_refs)}`);
+      }
+      if (operationTrace.capability_refs?.length) {
+        lines.push(`    capability_refs (${operationTrace.capability_refs.length}):`);
+        for (const ref of operationTrace.capability_refs) {
+          lines.push(
+            `      provider=${ref.provider} capability_id=${ref.capability_id} provider_run_id=${ref.provider_run_id} status=${ref.status}`
+          );
+          const details = [
+            ref.job_id ? `job_id=${ref.job_id}` : null,
+            ref.profile ? `profile=${ref.profile}` : null,
+            ref.operation_id ? `operation_id=${ref.operation_id}` : null,
+            ref.manifest_ref ? `manifest_ref=${ref.manifest_ref}` : null,
+            ref.trace_ref ? `trace_ref=${ref.trace_ref}` : null
+          ].filter((item): item is string => item !== null);
+          if (details.length) {
+            lines.push(`        ${details.join(" ")}`);
+          }
+          if (ref.artifact_refs?.length) {
+            lines.push(`        artifact_refs: ${ref.artifact_refs.join(", ")}`);
+          }
+        }
+      }
+      if (operationTrace.metadata && Object.keys(operationTrace.metadata).length > 0) {
+        lines.push(`    metadata: ${JSON.stringify(operationTrace.metadata)}`);
       }
     }
     lines.push("");

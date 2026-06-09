@@ -1,4 +1,4 @@
-import type { ActionEvent, RenderableBlock } from "@consoler/protocol";
+import type { ActionEvent, OperationTrace, OperationTraceCapabilityRef, RenderableBlock } from "@consoler/protocol";
 
 import type { InteractionRequest } from "@consoler/protocol";
 
@@ -87,6 +87,130 @@ export function resultBlocksFromEvents(events: ActionEvent[]): RenderableBlock[]
     }
   }
   return [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function stringMap(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  const result: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item !== "string") return null;
+    result[key] = item;
+  }
+  return result;
+}
+
+function stringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || item.length === 0) return null;
+    result.push(item);
+  }
+  return result;
+}
+
+function parseCapabilityRef(value: unknown): OperationTraceCapabilityRef | null {
+  if (!isRecord(value)) return null;
+  const provider = stringField(value, "provider");
+  const capability_id = stringField(value, "capability_id");
+  const provider_run_id = stringField(value, "provider_run_id");
+  const status = stringField(value, "status");
+  if (!provider || !capability_id || !provider_run_id || !status) {
+    return null;
+  }
+
+  const ref: OperationTraceCapabilityRef = {
+    provider,
+    capability_id,
+    provider_run_id,
+    status
+  };
+  for (const key of ["job_id", "profile", "operation_id", "manifest_ref", "trace_ref"] as const) {
+    const item = stringField(value, key);
+    if (item) {
+      ref[key] = item;
+    }
+  }
+  if (value.artifact_refs !== undefined) {
+    const artifactRefs = stringArray(value.artifact_refs);
+    if (!artifactRefs) return null;
+    ref.artifact_refs = artifactRefs;
+  }
+  return ref;
+}
+
+function parseOperationTrace(event: ActionEvent): OperationTrace | null {
+  const raw = event.payload?.operation_trace;
+  if (!isRecord(raw)) return null;
+
+  const operation_id = stringField(raw, "operation_id");
+  const action_id = stringField(raw, "action_id");
+  const agent_id = stringField(raw, "agent_id");
+  const command = stringField(raw, "command");
+  if (!operation_id || !action_id || !agent_id || !command) {
+    return null;
+  }
+  if (action_id !== event.action_id || agent_id !== event.agent_id || command !== event.command) {
+    return null;
+  }
+
+  const trace: OperationTrace = {
+    operation_id,
+    action_id,
+    agent_id,
+    command
+  };
+
+  const status = stringField(raw, "status");
+  if (status) {
+    trace.status = status;
+  }
+
+  if (raw.domain_refs !== undefined) {
+    const domainRefs = stringMap(raw.domain_refs);
+    if (!domainRefs) return null;
+    trace.domain_refs = domainRefs;
+  }
+
+  if (raw.capability_refs !== undefined) {
+    if (!Array.isArray(raw.capability_refs)) return null;
+    const capabilityRefs: OperationTraceCapabilityRef[] = [];
+    for (const item of raw.capability_refs) {
+      const ref = parseCapabilityRef(item);
+      if (!ref) return null;
+      capabilityRefs.push(ref);
+    }
+    trace.capability_refs = capabilityRefs;
+  }
+
+  if (raw.metadata !== undefined) {
+    if (!isRecord(raw.metadata)) return null;
+    trace.metadata = raw.metadata;
+  }
+
+  return trace;
+}
+
+export function operationTracesFromEvents(events: ActionEvent[]): OperationTrace[] {
+  const byOperationId = new Map<string, OperationTrace>();
+  for (const event of events) {
+    const trace = parseOperationTrace(event);
+    if (!trace) continue;
+    if (byOperationId.has(trace.operation_id)) {
+      byOperationId.delete(trace.operation_id);
+    }
+    byOperationId.set(trace.operation_id, trace);
+  }
+  return Array.from(byOperationId.values());
 }
 
 function storedEventToActionEvent(row: StoredEvent): ActionEvent | null {
@@ -248,6 +372,7 @@ export function getActionTrace(store: ConsolerStore, actionId: string): ActionTr
     runs,
     accepted_events,
     rejected_events,
+    operation_traces: operationTracesFromEvents(accepted_events),
     result_blocks: resultBlocksFromEvents(accepted_events),
     terminal_state,
     latest_run_id: timeline.run_id,

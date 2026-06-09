@@ -6,6 +6,7 @@ import actionEventSchema from "./schemas/action-event.json" with { type: "json" 
 import artifactViewSchema from "./schemas/artifact-view.json" with { type: "json" };
 import interactionRequestSchema from "./schemas/interaction-request.json" with { type: "json" };
 import manifestSchema from "./schemas/manifest.json" with { type: "json" };
+import operationTraceSchema from "./schemas/operation-trace.json" with { type: "json" };
 import renderableBlockSchema from "./schemas/renderable-block.json" with { type: "json" };
 import type { ActionEvent, AgentManifest, ArtifactView, RenderableBlock } from "./types.js";
 
@@ -26,6 +27,7 @@ function createAjv() {
   ajv.addSchema(agentErrorSchema);
   ajv.addSchema(renderableBlockSchema);
   ajv.addSchema(interactionRequestSchema);
+  ajv.addSchema(operationTraceSchema);
   ajv.addSchema(actionEventSchema);
   ajv.addSchema(manifestSchema);
   ajv.addSchema(artifactViewSchema);

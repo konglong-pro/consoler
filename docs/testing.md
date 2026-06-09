@@ -59,6 +59,7 @@ pnpm test:v4d-indbase-dogfood-ux
 pnpm test:v4e-indbase-variant-intent-drafting
 pnpm test:v4f-indbase-real-dogfood-friction-pass
 pnpm test:v4g-indbase-nl-v2-intent-drafting
+pnpm test:v5a-operation-trace-gate
 ```
 
 ## Local-Only Checks
