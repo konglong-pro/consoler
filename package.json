@@ -16,6 +16,7 @@
     "test:agentctl-smoke": "node scripts/test-agentctl-smoke.mjs",
     "test:redaction-smoke": "node scripts/test-redaction-smoke.mjs",
     "test:python-sdk": "node scripts/test-python-sdk.mjs",
+    "test:python-sdk-package": "node scripts/test-python-sdk-package.mjs",
     "typecheck": "pnpm -r typecheck"
   },
   "pnpm": {

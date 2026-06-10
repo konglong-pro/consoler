@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - master
+      - feat/v0-indbase-doctor-agentctl
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -63,6 +64,9 @@ jobs:
 
       - name: Test Python SDK
         run: pnpm test:python-sdk
+
+      - name: Python SDK package gate
+        run: pnpm test:python-sdk-package
 
       - name: Test conformance harness
         run: pnpm test:conformance

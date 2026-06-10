@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from consoler_agent_sdk import (
+    SUPPORTED_PROTOCOL_VERSION,
     AgentCancelled,
     AgentError,
     CancelFlag,
@@ -13,10 +14,15 @@ from consoler_agent_sdk import (
     InteractionHelper,
     JsonRpcServer,
     StepHelper,
+    __version__,
     artifact_block,
     diff_block,
+    markdown_block,
     normalize_error,
+    operation_trace,
+    operation_trace_payload,
 )
+import consoler_agent_sdk
 from consoler_agent_sdk.adapter import AgentAdapter
 
 
@@ -51,6 +57,13 @@ class EchoAdapter(AgentAdapter):
 
 
 MANIFEST = Path(__file__).parent / "manifest.json"
+
+
+def test_sdk_version_and_public_exports():
+    assert __version__ == "0.1.0"
+    assert SUPPORTED_PROTOCOL_VERSION == "0"
+    for name in consoler_agent_sdk.__all__:
+        assert hasattr(consoler_agent_sdk, name)
 
 
 @pytest.fixture
@@ -172,6 +185,87 @@ def test_diff_and_artifact_block_helpers():
     assert art["content"]["uri"] == "file:///tmp/out.txt"
     assert art["content"]["kind"] == "text/plain"
     assert art["content"]["metadata"]["bytes"] == 3
+
+
+def test_operation_trace_helpers():
+    trace = operation_trace(
+        operation_id="op_1",
+        action_id="act_1",
+        agent_id="echo",
+        command="echo.ping",
+        status="succeeded",
+        domain_refs={"doc_id": "doc_1"},
+        capability_refs=[
+            {
+                "provider": "swallow",
+                "capability_id": "swallow.ingest",
+                "provider_run_id": "prun_1",
+                "status": "succeeded",
+                "artifact_refs": ["fake://artifact/1"],
+            }
+        ],
+        metadata={"artifact_trust_state": "diagnostic"},
+    )
+    assert trace["operation_id"] == "op_1"
+    assert trace["domain_refs"]["doc_id"] == "doc_1"
+    assert trace["capability_refs"][0]["provider_run_id"] == "prun_1"
+
+    payload = operation_trace_payload(
+        operation_id="op_2",
+        action_id="act_2",
+        agent_id="echo",
+        command="echo.ping",
+    )
+    assert payload == {
+        "operation_trace": {
+            "operation_id": "op_2",
+            "action_id": "act_2",
+            "agent_id": "echo",
+            "command": "echo.ping",
+        }
+    }
+
+
+class OperationTraceAdapter(EchoAdapter):
+    def execute(self, command: str, args: dict, plan: dict, **kwargs) -> dict:
+        return {
+            "blocks": [],
+            "operation_trace": operation_trace(
+                operation_id="op_server",
+                action_id=kwargs["action_id"],
+                agent_id="echo",
+                command=command,
+                status="succeeded",
+                domain_refs={"doc_id": "doc_server"},
+            ),
+        }
+
+
+def test_run_execute_emits_operation_trace_on_terminal_success():
+    server = JsonRpcServer(OperationTraceAdapter())
+    published: list[dict] = []
+
+    def capture(message: dict) -> None:
+        if message.get("method") == "agent.event":
+            published.append(message["params"]["event"])
+
+    server._write_message = capture  # type: ignore[method-assign]
+
+    result = server._run_execute(
+        {
+            "run_id": "run_1",
+            "action_id": "act_1",
+            "command": "echo.ping",
+            "args": {},
+            "plan": {"steps": []},
+        }
+    )
+
+    assert result == {"ok": True}
+    succeeded = [event for event in published if event["type"] == "action.succeeded"]
+    assert len(succeeded) == 1
+    assert succeeded[0]["payload"]["operation_trace"]["operation_id"] == "op_server"
+    assert succeeded[0]["payload"]["operation_trace"]["domain_refs"]["doc_id"] == "doc_server"
 
 
 def test_interaction_request_and_respond():
@@ -314,6 +408,48 @@ def test_interaction_timeout_skip_and_continue_results():
     helper._pending_id = "ix_continue"
     result = helper.respond("ix_continue", {"timed_out": True, "action": "continue"})
     assert result == {"ok": True}
+
+
+def test_get_artifact_view_default_unsupported():
+    adapter = EchoAdapter()
+    with pytest.raises(AgentError) as exc:
+        adapter.get_artifact_view(
+            artifact_uri="fake://x",
+            kind="text/plain",
+            block_id="b1",
+            action_id="act_1",
+        )
+    assert exc.value.code == "artifact_retrieval.unsupported"
+
+
+class ArtifactAdapter(EchoAdapter):
+    def get_artifact_view(self, **kwargs) -> dict:
+        return {
+            "artifact_uri": kwargs["artifact_uri"],
+            "kind": kwargs["kind"],
+            "blocks": [markdown_block("# View", title="view")],
+        }
+
+
+def test_jsonrpc_get_artifact_view_dispatch():
+    adapter = ArtifactAdapter()
+    server = JsonRpcServer(adapter)
+    response = server._dispatch(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "agent.get_artifact_view",
+            "params": {
+                "artifact_uri": "fake://artifacts/x",
+                "kind": "conformance.fixture",
+                "block_id": "b1",
+                "action_id": "act_1",
+            },
+        }
+    )
+    assert response is not None
+    assert response["result"]["artifact_uri"] == "fake://artifacts/x"
+    assert response["result"]["blocks"][0]["type"] == "markdown"
 
 
 def test_jsonrpc_discover_dispatch(monkeypatch):

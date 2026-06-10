@@ -228,6 +228,14 @@ class JsonRpcServer:
             return self.adapter.cancel()
         if method == "agent.health":
             return self.adapter.health()
+        if method == "agent.get_artifact_view":
+            return self.adapter.get_artifact_view(
+                artifact_uri=str(params["artifact_uri"]),
+                kind=str(params["kind"]),
+                block_id=str(params["block_id"]),
+                action_id=str(params["action_id"]),
+                metadata=params.get("metadata"),
+            )
         raise AgentError("method.not_found", f"Unknown method: {method}")
 
     def _run_execute(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -268,10 +276,13 @@ class JsonRpcServer:
                 interaction=interaction,
             )
             blocks = result.get("blocks", [])
+            terminal_fields: dict[str, Any] = {}
             if blocks:
-                emitter.emit("action.succeeded", blocks=blocks)
-            else:
-                emitter.emit("action.succeeded")
+                terminal_fields["blocks"] = blocks
+            operation_trace = result.get("operation_trace")
+            if operation_trace is not None:
+                terminal_fields["payload"] = {"operation_trace": operation_trace}
+            emitter.emit("action.succeeded", **terminal_fields)
             return {"ok": True}
         except AgentCancelled as cancelled:
             emitter.emit(
